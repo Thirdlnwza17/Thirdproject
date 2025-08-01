@@ -1,0 +1,43 @@
+{
+  "name": "my-project",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google-cloud/vision": "^4.0.2",
+    "chart.js": "^4.5.0",
+    "file-saver": "^2.0.5",
+    "firebase": "^11.10.0",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "next": "15.4.1",
+    "pdfjs-dist": "^5.3.93",
+    "postcss": "^8.5.6",
+    "react": "19.1.0",
+    "react-chartjs-2": "^5.3.0",
+    "react-dom": "19.1.0",
+    "tesseract.js": "^5.0.4"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.1",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5"
+  },
+  "description": "ระบบเว็บแอปพลิเคชันสำหรับบันทึก ติดตาม ค้นหา และตรวจสอบข้อมูลการทำงานของเครื่องนึ่งฆ่าเชื้อ (St                terilizer) ในโรงพยาบาล รองรับการอัปโหลดข้อมูล, ค้นหาข้อมูลย้อนหลัง, และ export ข้อมูลได้",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
