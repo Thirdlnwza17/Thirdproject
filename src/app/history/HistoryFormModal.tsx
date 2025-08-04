@@ -1,24 +1,59 @@
 'use client';
 import React, { useEffect } from 'react';
 
-export default function HistoryFormModal({ show, onClose, onSubmit, form, setForm, submitting, errorMsg, successMsg, user }: {
-  show: boolean,
-  onClose: () => void,
-  onSubmit: (e: React.FormEvent) => void,
-  form: any,
-  setForm: (v: any) => void,
-  submitting: boolean,
-  errorMsg: string,
-  successMsg: string,
-  user: any
-}) {
-  if (!show) return null;
+interface FormData {
+  program?: string;
+  sterilizer?: string;
+  date?: string;
+  prevac?: boolean;
+  c134c?: boolean;
+  s9?: boolean;
+  d20?: boolean;
+  printed_out_type?: string;
+  mechanical?: string;
+  chemical_external?: string;
+  chemical_internal?: string;
+  bio_test?: string;
+  sterile_staff?: string;
+  items?: Array<{ name: string; quantity: string | number }>;
+  [key: string]: any;
+}
+
+interface FormModalProps {
+  show: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  form: FormData;
+  setForm: (v: React.SetStateAction<FormData>) => void;
+  submitting: boolean;
+  errorMsg: string;
+  successMsg: string;
+}
+
+export default function HistoryFormModal({ 
+  show, 
+  onClose, 
+  onSubmit, 
+  form, 
+  setForm, 
+  submitting, 
+  errorMsg, 
+  successMsg 
+}: FormModalProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
+    
+    setForm((prev: FormData) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
+
+  // Handle program changes
   useEffect(() => {
     if (form.program === 'PREVAC' || form.program === 'BOWIE') {
-      setForm((prev: any) => ({
+      setForm((prev: FormData) => ({
         ...prev,
         prevac: true,
         c134c: true,
@@ -27,7 +62,7 @@ export default function HistoryFormModal({ show, onClose, onSubmit, form, setFor
         printed_out_type: 'Autoclave',
       }));
     } else if (form.program === 'EO') {
-      setForm((prev: any) => ({
+      setForm((prev: FormData) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -36,7 +71,7 @@ export default function HistoryFormModal({ show, onClose, onSubmit, form, setFor
         printed_out_type: 'EO',
       }));
     } else if (form.program === 'Plasma') {
-      setForm((prev: any) => ({
+      setForm((prev: FormData) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -45,7 +80,7 @@ export default function HistoryFormModal({ show, onClose, onSubmit, form, setFor
         printed_out_type: 'Plasma',
       }));
     } else if (form.program) {
-      setForm((prev: any) => ({
+      setForm((prev: FormData) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -55,6 +90,8 @@ export default function HistoryFormModal({ show, onClose, onSubmit, form, setFor
       }));
     }
   }, [form.program, setForm]);
+  
+  if (!show) return null;
   // ก่อน return ให้แน่ใจว่า form.items เป็น array 45 ช่องเสมอ
   const items = Array.from({ length: 45 }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
   return (
