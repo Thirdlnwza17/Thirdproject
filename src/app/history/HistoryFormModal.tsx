@@ -1,23 +1,38 @@
 'use client';
 import React, { useEffect } from 'react';
 
-interface FormData {
+export interface FormData {
+  // Basic fields
+  status: string;
   program?: string;
   sterilizer?: string;
   date?: string;
+  
+  // Checkbox fields
   prevac?: boolean;
   c134c?: boolean;
   s9?: boolean;
   d20?: boolean;
-  printed_out_type?: string;
+  
+  // Test results
   mechanical?: string;
   chemical_external?: string;
   chemical_internal?: string;
   bio_test?: string;
+  
+  // Staff and other info
   sterile_staff?: string;
+  result_reader?: string;
+  printed_out_type?: string;
+  
+  // Items array
   items?: Array<{ name: string; quantity: string | number }>;
+  
+  // For type compatibility with the rest of the application
   [key: string]: any;
 }
+
+import { User } from 'firebase/auth';
 
 interface FormModalProps {
   show: boolean;
@@ -28,6 +43,7 @@ interface FormModalProps {
   submitting: boolean;
   errorMsg: string;
   successMsg: string;
+  user: User | null;
 }
 
 export default function HistoryFormModal({ 
