@@ -15,9 +15,26 @@ import EditLoadModal from './EditLoadModal';
 import DuplicateModal from './DuplicateModal';
 
 
-// ลบ device_id, start_time ออกจาก initialForm
-const initialForm = {
+import { FormData } from './HistoryFormModal';
+
+// Initialize form with default values that match the FormData type
+const initialForm: FormData = {
   status: "PASS",
+  program: "",
+  sterilizer: "",
+  date: new Date().toISOString().split('T')[0], // Default to today's date
+  prevac: false,
+  c134c: false,
+  s9: false,
+  d20: false,
+  mechanical: "",
+  chemical_external: "",
+  chemical_internal: "",
+  bio_test: "",
+  sterile_staff: "",
+  result_reader: "",
+  printed_out_type: "Autoclave",
+  items: Array(45).fill(null).map(() => ({ name: '', quantity: '' }))
 };
 
 const SLIP_KEYWORDS = [
