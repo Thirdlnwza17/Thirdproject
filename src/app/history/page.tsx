@@ -23,7 +23,6 @@ const initialForm: FormData = {
   status: "PASS",
   program: "",
   sterilizer: "",
-  date: new Date().toISOString().split('T')[0], // Default to today's date
   prevac: false,
   c134c: false,
   s9: false,
@@ -836,6 +835,7 @@ export default function HistoryPage() {
             deleteLoading={false}
             error={editError}
             allLoads={entries}
+            user={user}
           />
         )}
         {editOcr && (
@@ -848,6 +848,7 @@ export default function HistoryPage() {
             deleteLoading={false}
             error={editOcrError}
             allLoads={entries}
+            user={user}
           />
         )}
         <HistoryFormModal
