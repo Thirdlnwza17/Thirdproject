@@ -376,7 +376,6 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
               <div><span className="font-semibold">ผลชีวภาพ:</span> {load.bio_test || "-"}</div>
               <div><span className="font-semibold">เจ้าหน้าที่:</span> {load.sterile_staff || "-"}</div>
               <div><span className="font-semibold">ผู้อ่านผล:</span> {load.result_reader || "-"}</div>
-              <div><span className="font-semibold">Printed out:</span> {load.printed_out_type || "-"}</div>
             </div>
             {/* ชุดอุปกรณ์ */}
             {load.items && load.items.length > 0 && (
@@ -456,6 +455,7 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
           deleteLoading={deleteLoading}
           error={editError}
           allLoads={loads}
+          user={user}
         />
       )}
     </>
