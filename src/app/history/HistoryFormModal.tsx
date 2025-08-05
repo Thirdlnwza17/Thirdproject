@@ -11,7 +11,7 @@ export interface FormData {
   // Checkbox fields
   prevac?: boolean;
   c134c?: boolean;
-  s9?: boolean;
+  s9?: boolean; 
   d20?: boolean;
   
   // Test results
