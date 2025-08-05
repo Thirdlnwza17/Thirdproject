@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
 import { getFirestore, setDoc, doc, getDoc, Timestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -24,6 +25,13 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
+      // Update the user's display name in Firebase Auth
+      if (fullName.trim()) {
+        await updateProfile(user, {
+          displayName: fullName.trim()
+        });
+      }
 
       // Save user info to Firestore
       const db = getFirestore();
@@ -38,6 +46,7 @@ export default function LoginPage() {
 
       await setDoc(userRef, {
         email: user.email,
+        fullName: fullName.trim() || null,
         lastLogin: Timestamp.now(),
         role,
       }, { merge: true });
@@ -79,9 +88,22 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent text-center mb-2">
           เข้าสู่ระบบ
         </h1>
-        <p className="text-gray-500 text-center mb-8">กรุณากรอกอีเมลและรหัสผ่านของคุณ</p>
+        <p className="text-gray-500 text-center mb-8">กรุณากรอกชื่อ-นามสกุล อีเมล และรหัสผ่านของคุณ</p>
         
         <form className="w-full space-y-5" onSubmit={handleSubmit}>
+          <div className="space-y-1">
+            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">ชื่อ-นามสกุล</label>
+            <input
+              id="fullName"
+              type="text"
+              placeholder="กรุณากรอกชื่อ-นามสกุล"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-base text-gray-800 placeholder-gray-400 transition-all duration-200"
+              required
+            />
+          </div>
+          
           <div className="space-y-1">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">อีเมล</label>
             <input
