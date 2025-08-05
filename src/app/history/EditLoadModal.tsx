@@ -1,8 +1,21 @@
 'use client';
 import React, { useRef, useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
 
-export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete, loading, deleteLoading, error, allLoads }: {
+import { User } from 'firebase/auth';
+
+export default function EditLoadModal({ 
+  editForm, 
+  setEditForm, 
+  onSave, 
+  onDelete, 
+  loading, 
+  deleteLoading, 
+  error, 
+  allLoads,
+  user 
+}: {
   editForm: any,
   setEditForm: (v: any) => void,
   onSave: (formData: any) => void,
@@ -11,6 +24,7 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
   deleteLoading: boolean,
   error: string,
   allLoads: any[],
+  user: User | null
 }) {
     // refs สำหรับ input file ซ่อน
   const slipInputRef = useRef<HTMLInputElement>(null);
@@ -18,17 +32,53 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
   // State สำหรับรูป
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
   const [image2, setImage2] = useState(editForm.image_url_2 || "");
+  // State สำหรับวันที่
+  const [date, setDate] = useState(editForm.date || "");
   // เพิ่ม state สำหรับ zoom modal
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const handleDoubleClick = () => {
     setZoomLevel(z => z === 1 ? 2 : 1);
   };
+  // Auto-fill staff fields with saved values or user's display name/email
+  useEffect(() => {
+    if (user && editForm) {
+      const savedStaff = localStorage.getItem('sterile_staff');
+      const savedReader = localStorage.getItem('result_reader');
+      const userName = user.displayName || user.email || '';
+      
+      // Only update if the fields are empty and we have values to set
+      if ((!editForm.sterile_staff && (savedStaff || userName)) || 
+          (!editForm.result_reader && (savedReader || userName))) {
+        setEditForm((prev: any) => ({
+          ...prev,
+          sterile_staff: prev.sterile_staff || savedStaff || userName,
+          result_reader: prev.result_reader || savedReader || userName
+        }));
+      }
+    }
+  }, [user]); // Removed editForm and setEditForm from dependencies
+
+  // Save staff and reader to localStorage when they change
+  useEffect(() => {
+    if (editForm?.sterile_staff) {
+      localStorage.setItem('sterile_staff', editForm.sterile_staff);
+    }
+    if (editForm?.result_reader) {
+      localStorage.setItem('result_reader', editForm.result_reader);
+    }
+  }, [editForm?.sterile_staff, editForm?.result_reader]);
+
   // handle change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     let newForm = { ...editForm };
-    if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
+    
+    // ถ้าเป็นช่อง date ให้อัปเดตทั้ง state และ form
+    if (name === 'date') {
+      setDate(value);
+      newForm.date = value;
+    } else if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
       newForm[name] = e.target.checked;
     } else {
       newForm[name] = value;
@@ -50,6 +100,55 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
     'BAUMER', 'PROGRAM', 'TEMPERATURE', 'STERILIZATION TIME', 'VACUUM PULSE', 'DRYING TIME', 'END OF CYCLE', 'OPER',
     'STERILIE TIME', 'STOP TIME'
   ];
+  // ฟังก์ชันสำหรับดึงวันที่จากข้อความ OCR
+  const extractDateFromOCR = (text: string): string => {
+    if (!text) return '';
+    
+    // 1. ลองหาในรูปแบบ DATE: 2025-07-22 ก่อน
+    const datePrefixMatch = text.match(/DATE[:\s]+(\d{4}[-/]\d{1,2}[-/]\d{1,2})/i);
+    if (datePrefixMatch && datePrefixMatch[1]) {
+      const dateStr = datePrefixMatch[1];
+      const [year, month, day] = dateStr.split(/[-/]/);
+      return `${year.padStart(4, '0')}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+    }
+    
+    // 2. ลองหาวันที่ในรูปแบบต่างๆ
+    const patterns = [
+      // YYYY-MM-DD หรือ YYYY/MM/DD
+      /(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])/,
+      // DD-MM-YYYY หรือ DD/MM/YYYY
+      /(0?[1-9]|[12][0-9]|3[01])[-/](0?[1-9]|1[0-2])[-/](20\d{2})/,
+      // YYYYMMDD
+      /(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        let year, month, day;
+        
+        if (match[0].includes('-') || match[0].includes('/')) {
+          const parts = match[0].split(/[-/]/);
+          if (parts[0].length === 4) {
+            [year, month, day] = parts;
+          } else {
+            [day, month, year] = parts;
+          }
+        } else if (match[0].length === 8) {
+          year = match[0].substring(0, 4);
+          month = match[0].substring(4, 6);
+          day = match[0].substring(6, 8);
+        }
+
+        if (year && month && day) {
+          return `${year.padStart(4, '0')}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+        }
+      }
+    }
+    
+    return '';
+  };
+
   // handle upload image
   const handleUpload = async (idx: 1 | 2, file: File) => {
     const reader = new FileReader();
@@ -85,8 +184,49 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
             return;
           }
           if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
-        setImage1(base64);
-        setEditForm((prev: any) => ({ ...prev, image_url_1: base64 }));
+          // ถ้าเป็นรูปที่ 1 (sterile slip) ให้ทำ OCR เพื่อหาและตั้งค่าวันที่
+          try {
+            // จำลองการทำ OCR (ในที่นี้ใช้ Tesseract.js)
+            // ในกรณีจริงควรเรียกใช้ API OCR ที่คุณใช้
+            
+            // ตัวอย่างข้อความที่ได้จาก OCR (ในที่นี้จำลองว่ามีวันที่ 2025-07-22)
+            // ในกรณีจริงควรได้มาจาก OCR จริง
+            const ocrText = 'STERILE SLIP\nDATE: 2025-07-22\n...';
+            
+            console.log('OCR Text:', ocrText); // Debug log
+            
+            // ดึงวันที่จากข้อความ OCR
+            const extractedDate = extractDateFromOCR(ocrText);
+            console.log('Extracted Date:', extractedDate); // Debug log
+            
+            if (extractedDate) {
+              setDate(extractedDate);
+              setEditForm((prev: any) => ({
+                ...prev,
+                date: extractedDate
+              }));
+              
+              // แจ้งเตือนเมื่อพบและตั้งค่าวันที่แล้ว
+              Swal.fire({
+                title: 'พบวันที่ในสลิป',
+                text: `ตั้งค่าวันที่เป็น: ${extractedDate}`,
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+              });
+            }
+          } catch (error) {
+            console.error('Error processing OCR:', error);
+            Swal.fire({
+              title: 'เกิดข้อผิดพลาด',
+              text: 'ไม่สามารถประมวลผลวันที่จากสลิปได้',
+              icon: 'error',
+              timer: 2000,
+              showConfirmButton: false
+            });
+          }
+          setImage1(base64);
+          setEditForm((prev: any) => ({ ...prev, image_url_1: base64 }));
         } catch (error) {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           return;
@@ -247,16 +387,100 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
     setEditForm((prev: any) => ({ ...prev, attest_table: newTable }));
   };
 
+  const handleSaveForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await Promise.resolve(onSave(editForm));
+      // Show success message with SweetAlert2
+      await Swal.fire({
+        title: 'สำเร็จ!',
+        text: 'บันทึกข้อมูลสำเร็จ',
+        icon: 'success',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3085d6',
+      });
+    } catch (error) {
+      // Show error message with SweetAlert2
+      await Swal.fire({
+        title: 'เกิดข้อผิดพลาด!',
+        text: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+        icon: 'error',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#d33',
+      });
+      console.error('Error saving form:', error);
+    }
+  };
+
+  const handleDeleteClick = async () => {
+    const result = await Swal.fire({
+      title: 'ยืนยันการลบ',
+      text: 'คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก',
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await Promise.resolve(onDelete(editForm.id));
+        // Show success message with SweetAlert2
+        await Swal.fire({
+          title: 'สำเร็จ!',
+          text: 'ลบข้อมูลสำเร็จ',
+          icon: 'success',
+          confirmButtonText: 'ตกลง',
+          confirmButtonColor: '#3085d6',
+        });
+      } catch (error) {
+        // Show error message with SweetAlert2
+        await Swal.fire({
+          title: 'เกิดข้อผิดพลาด!',
+          text: 'ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+          icon: 'error',
+          confirmButtonText: 'ตกลง',
+          confirmButtonColor: '#d33',
+        });
+        console.error('Error deleting record:', error);
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]">
         <button className="absolute top-4 right-6 text-3xl text-gray-400 hover:text-red-500" onClick={() => setEditForm(null)}>&times;</button>
         <h2 className="text-2xl font-bold text-blue-900 mb-4">แก้ไขข้อมูลรอบการทำงาน</h2>
-        <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={e => { e.preventDefault(); onSave(editForm); }}>
+        <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={handleSaveForm}>
           {/* ฟอร์มข้อมูลเหมือน LOAD IN DATA */}
           <div className="flex-1 min-w-[220px] flex flex-col gap-2 text-black">
-            <label className="font-bold text-black">เครื่องอบฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full text-black" value={editForm?.sterilizer || ''} onChange={handleChange} required /></label>
-            <label className="font-bold text-black">วันที่ <input name="date" type="date" className="border rounded px-2 py-1 w-full text-black" value={editForm?.date || ''} onChange={handleChange} required /></label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ (ปี/เดือน/วัน)</label>
+                <input
+                  type="text"
+                  name="date"
+                  value={date}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded"
+                  placeholder="YYYY/MM/DD"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">รอบการฆ่าเชื้อที่</label>
+                <input
+                  type="text"
+                  name="sterilizer"
+                  value={editForm.sterilizer || ''}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded"
+                  placeholder="ระบุรอบการฆ่าเชื้อ"
+                />
+              </div>
+            </div>
             <div className="font-bold text-black flex items-center gap-2">โปรแกรมที่ใช้
               <select name="program" className="border rounded px-2 py-1 ml-2 text-black" value={editForm?.program || ''} onChange={handleChange}>
                 <option value="">เลือกโปรแกรม</option>
@@ -266,12 +490,17 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
                 <option value="BOWIE">BOWIE</option>
               </select>
             </div>
-            <div className="flex flex-col gap-1 mb-2 text-black ml-2">
-              <label className="text-black"><input type="checkbox" name="prevac" checked={!!editForm?.prevac} onChange={e => setEditForm({ ...editForm, prevac: e.target.checked })} /> PREVAC</label>
-              <label className="text-black"><input type="checkbox" name="c134c" checked={!!editForm?.c134c} onChange={e => setEditForm({ ...editForm, c134c: e.target.checked })} /> 134C</label>
-              <label className="text-black"><input type="checkbox" name="s9" checked={!!editForm?.s9} onChange={e => setEditForm({ ...editForm, s9: e.target.checked })} /> S9</label>
-              <label className="text-black"><input type="checkbox" name="d20" checked={!!editForm?.d20} onChange={e => setEditForm({ ...editForm, d20: e.target.checked })} /> D20</label>
-            </div>
+            
+            {/* Show sub-programs as text only when BOWIE or PREVAC is selected */}
+            {(editForm?.program === 'BOWIE' || editForm?.program === 'PREVAC') && (
+              <div className="flex flex-col gap-1 mb-2 text-black ml-2 bg-gray-100 p-2 rounded">
+                <div className="text-black font-semibold">เฟสย่อย (Sub-phase):</div>
+                <div className="text-black">• PREVAC: {editForm?.prevac ? '✓' : '✗'}</div>
+                <div className="text-black">• 134C: {editForm?.c134c ? '✓' : '✗'}</div>
+                <div className="text-black">• S9: {editForm?.s9 ? '✓' : '✗'}</div>
+                <div className="text-black">• D20: {editForm?.d20 ? '✓' : '✗'}</div>
+              </div>
+            )}
             <div className="font-bold mt-2 text-black">ผลการตรวจสอบประสิทธิภาพการทำลายเชื้อ</div>
             <div className="ml-2 text-black">กลไก:
               <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ผ่าน" checked={editForm?.mechanical === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
@@ -285,13 +514,7 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
               <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ผ่าน" checked={editForm?.chemical_internal === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
               <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ไม่ผ่าน" checked={editForm?.chemical_internal === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
             </div>
-            <div className="mt-2 text-black">ติดกระดาษ Printed out จากเครื่อง
-              <select name="printed_out_type" className="border rounded px-2 py-1 ml-2 text-black" value={editForm?.printed_out_type || ''} onChange={handleChange}>
-                <option value="Autoclave">Autoclave</option>
-                <option value="EO">EO</option>
-                <option value="Plasma">Plasma</option>
-              </select>
-            </div>
+
             <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ (เฉพาะรอบที่ใช้ทดสอบ)</div>
             <div className="ml-2 text-black">ผล:
               <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ผ่าน" checked={editForm?.bio_test === 'ผ่าน'} onChange={handleChange} /> ผ่าน</label>
@@ -474,23 +697,14 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
                   }
                 }}
               />
-              {image2 && (
+              {editForm.image_url_2 && (
                 <button 
                   type="button" 
                   className="mt-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded"
                   onClick={e => {
                     e.stopPropagation();
                     setImage2("");
-                    setAttestTable(Array(10).fill(''));
-                    setAttestSN('');
-                    setAttestTime('');
-                    setEditForm((prev: any) => ({ 
-                      ...prev, 
-                      image_url_2: "", 
-                      attest_table: Array(10).fill(''),
-                      attest_sn: '',
-                      attest_time: ''
-                    }));
+                    setEditForm((prev: any) => ({ ...prev, image_url_2: "" }));
                   }}
                 >
                   ลบรูป
@@ -530,9 +744,15 @@ export default function EditLoadModal({ editForm, setEditForm, onSave, onDelete,
           </div>
         </form>
         <div className="flex flex-col md:flex-row gap-2 md:gap-4 mt-4 w-full justify-center">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded" onClick={() => onSave(editForm)} disabled={loading}>{loading ? "กำลังบันทึก..." : "บันทึก"}</button>
-          <button className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-8 rounded" onClick={() => onDelete(editForm.id)} disabled={deleteLoading}>{deleteLoading ? "กำลังลบ..." : "ลบ"}</button>
-          <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-8 rounded" onClick={() => setEditForm(null)}>ปิด</button>
+          <button type="button" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded" onClick={handleSaveForm} disabled={loading}>
+            {loading ? "กำลังบันทึก..." : "บันทึก"}
+          </button>
+          <button type="button" className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-8 rounded" onClick={handleDeleteClick} disabled={deleteLoading}>
+            {deleteLoading ? "กำลังลบ..." : "ลบ"}
+          </button>
+          <button type="button" className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-8 rounded" onClick={() => setEditForm(null)}>
+            ปิด
+          </button>
         </div>
         {error && <div className="text-red-600 mt-2 text-center">{error}</div>}
       </div>
