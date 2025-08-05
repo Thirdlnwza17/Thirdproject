@@ -425,7 +425,7 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-end sm:items-center">
             <div className="bg-blue-100 text-blue-800 rounded-full px-4 sm:px-6 py-2 font-semibold shadow flex items-center justify-center gap-2 text-sm sm:text-base">
               <span className="text-lg sm:text-xl">👤</span>
-              <span className="truncate max-w-[180px] sm:max-w-xs">{user?.email}</span>
+              <span className="truncate max-w-[180px] sm:max-w-xs">{user?.displayName || user?.email}</span>
             </div>
             <div className="flex flex-row gap-2 sm:gap-3 w-full sm:w-auto">
               <Link 
