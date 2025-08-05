@@ -1,12 +1,12 @@
 'use client';
 import React, { useEffect } from 'react';
+import Swal from 'sweetalert2';
 
 export interface FormData {
   // Basic fields
   status: string;
   program?: string;
   sterilizer?: string;
-  date?: string;
   
   // Checkbox fields
   prevac?: boolean;
@@ -37,7 +37,7 @@ import { User } from 'firebase/auth';
 interface FormModalProps {
   show: boolean;
   onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (e: React.FormEvent) => Promise<void> | void;
   form: FormData;
   setForm: (v: React.SetStateAction<FormData>) => void;
   submitting: boolean;
@@ -54,8 +54,58 @@ export default function HistoryFormModal({
   setForm, 
   submitting, 
   errorMsg, 
-  successMsg 
+  successMsg, 
+  user 
 }: FormModalProps) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await Promise.resolve(onSubmit(e));
+      // Show success message with SweetAlert2
+      await Swal.fire({
+        title: 'สำเร็จ!',
+        text: 'บันทึกข้อมูลสำเร็จ',
+        icon: 'success',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3085d6',
+      });
+    } catch (error) {
+      // Show error message with SweetAlert2
+      await Swal.fire({
+        title: 'เกิดข้อผิดพลาด!',
+        text: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+        icon: 'error',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#d33',
+      });
+      console.error('Error submitting form:', error);
+    }
+  };
+  // Auto-fill staff fields with saved values or user's display name/email
+  useEffect(() => {
+    if (user) {
+      const savedStaff = localStorage.getItem('sterile_staff');
+      const savedReader = localStorage.getItem('result_reader');
+      const userName = user.displayName || user.email || '';
+      
+      setForm(prev => ({
+        ...prev,
+        sterile_staff: prev.sterile_staff || savedStaff || userName,
+        result_reader: prev.result_reader || savedReader || userName
+      }));
+    }
+  }, [user, setForm]);
+
+  // Save staff and reader to localStorage when they change
+  useEffect(() => {
+    if (form.sterile_staff) {
+      localStorage.setItem('sterile_staff', form.sterile_staff);
+    }
+    if (form.result_reader) {
+      localStorage.setItem('result_reader', form.result_reader);
+    }
+  }, [form.sterile_staff, form.result_reader]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
@@ -108,8 +158,8 @@ export default function HistoryFormModal({
   }, [form.program, setForm]);
   
   if (!show) return null;
-  // ก่อน return ให้แน่ใจว่า form.items เป็น array 45 ช่องเสมอ
-  const items = Array.from({ length: 45 }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
+  // ก่อน return ให้แน่ใจว่า form.items เป็น array 15 ช่องเสมอ
+  const items = Array.from({ length: 15 }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl relative max-h-[95vh] flex flex-col p-6 overflow-y-auto text-black">
@@ -121,12 +171,11 @@ export default function HistoryFormModal({
           ×
         </button>
         <h2 className="text-2xl font-bold mb-4 text-blue-900 text-center text-black">LOAD IN DATA - บันทึกรอบการทำงาน</h2>
-        <form className="flex flex-col gap-4 text-black" onSubmit={onSubmit}>
+        <form className="flex flex-col gap-4 text-black" onSubmit={handleSubmit}>
           <div className="flex flex-col md:flex-row gap-6">
             {/* ฝั่งซ้าย: ข้อมูลรอบ/checkbox */}
             <div className="flex-1 min-w-[260px] flex flex-col gap-2">
-              <label className="font-bold text-black">เครื่องอบฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full text-black" value={form.sterilizer || ''} onChange={handleChange} required /></label>
-              <label className="font-bold text-black">วันที่ <input name="date" type="date" className="border rounded px-2 py-1 w-full text-black" value={form.date || ''} onChange={handleChange} required /></label>
+              <label className="font-bold text-black">รอบการฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full text-black" value={form.sterilizer || ''} onChange={handleChange} required /></label>
               <div className="font-bold text-black flex items-center gap-2">โปรแกรมที่ใช้
                 <select name="program" className="border rounded px-2 py-1 ml-2 text-black" value={form.program || ''} onChange={handleChange}>
                   <option value="">เลือกโปรแกรม</option>
@@ -136,12 +185,16 @@ export default function HistoryFormModal({
                   <option value="BOWIE">BOWIE</option>
                 </select>
               </div>
-              <div className="flex flex-col gap-1 mb-2 text-black ml-2">
-                <label className="text-black"><input type="checkbox" name="prevac" checked={!!form.prevac} onChange={e => setForm({ ...form, prevac: e.target.checked })} /> PREVAC</label>
-                <label className="text-black"><input type="checkbox" name="c134c" checked={!!form.c134c} onChange={e => setForm({ ...form, c134c: e.target.checked })} /> 134C</label>
-                <label className="text-black"><input type="checkbox" name="s9" checked={!!form.s9} onChange={e => setForm({ ...form, s9: e.target.checked })} /> S9</label>
-                <label className="text-black"><input type="checkbox" name="d20" checked={!!form.d20} onChange={e => setForm({ ...form, d20: e.target.checked })} /> D20</label>
-              </div>
+              {/* Show sub-programs as text only when BOWIE or PREVAC is selected */}
+              {(form.program === 'BOWIE' || form.program === 'PREVAC') && (
+                <div className="flex flex-col gap-1 mb-2 text-black ml-2 bg-gray-100 p-2 rounded">
+                  <div className="text-black font-semibold">เฟสย่อย (Sub-phase):</div>
+                  <div className="text-black">• PREVAC: {form?.prevac ? '✓' : '✗'}</div>
+                  <div className="text-black">• 134C: {form?.c134c ? '✓' : '✗'}</div>
+                  <div className="text-black">• S9: {form?.s9 ? '✓' : '✗'}</div>
+                  <div className="text-black">• D20: {form?.d20 ? '✓' : '✗'}</div>
+                </div>
+              )}
               <div className="font-bold mt-2 text-black">ผลการตรวจสอบประสิทธิภาพการทำลายเชื้อ</div>
               <div className="ml-2 text-black">กลไก:
                 <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ผ่าน" checked={form.mechanical === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
@@ -155,13 +208,7 @@ export default function HistoryFormModal({
                 <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ผ่าน" checked={form.chemical_internal === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
                 <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ไม่ผ่าน" checked={form.chemical_internal === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
               </div>
-              <div className="mt-2 text-black">ติดกระดาษ Printed out จากเครื่อง
-                <select name="printed_out_type" className="border rounded px-2 py-1 ml-2 text-black" value={form.printed_out_type || ''} onChange={handleChange}>
-                  <option value="Autoclave">Autoclave</option>
-                  <option value="EO">EO</option>
-                  <option value="Plasma">Plasma</option>
-                </select>
-              </div>
+
               <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ (เฉพาะรอบที่ใช้ทดสอบ)</div>
               <div className="ml-2 text-black">ผล:
                 <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ผ่าน" checked={form.bio_test === 'ผ่าน'} onChange={handleChange} /> ผ่าน</label>
