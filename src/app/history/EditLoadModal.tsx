@@ -34,6 +34,7 @@ export default function EditLoadModal({
   const [image2, setImage2] = useState(editForm.image_url_2 || "");
   // State สำหรับวันที่
   const [date, setDate] = useState(editForm.date || "");
+  const [dateError, setDateError] = useState("");
   // เพิ่ม state สำหรับ zoom modal
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -69,6 +70,34 @@ export default function EditLoadModal({
     }
   }, [editForm?.sterile_staff, editForm?.result_reader]);
 
+  // ฟังก์ชันตรวจสอบความถูกต้องของวันที่
+  const validateDate = (dateStr: string): boolean => {
+    if (!dateStr) return true; // Allow empty date for now
+    
+    // ตรวจสอบรูปแบบ YYYY/MM/DD
+    const dateRegex = /^\d{4}\/(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])$/;
+    if (!dateRegex.test(dateStr)) {
+      setDateError('รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น YYYY/MM/DD');
+      return false;
+    }
+    
+    // ตรวจสอบว่าวันที่ถูกต้องหรือไม่
+    const [year, month, day] = dateStr.split('/').map(Number);
+    const date = new Date(year, month - 1, day);
+    
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      setDateError('วันที่ไม่ถูกต้อง');
+      return false;
+    }
+    
+    setDateError('');
+    return true;
+  };
+  
   // handle change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -76,8 +105,26 @@ export default function EditLoadModal({
     
     // ถ้าเป็นช่อง date ให้อัปเดตทั้ง state และ form
     if (name === 'date') {
-      setDate(value);
-      newForm.date = value;
+      // ตรวจสอบและจัดรูปแบบวันที่
+      let formattedValue = value;
+      
+      // ลบอักขระที่ไม่ใช่ตัวเลข
+      const numbers = value.replace(/[^0-9]/g, '');
+      
+      // จัดรูปแบบให้เป็น YYYY/MM/DD
+      if (numbers.length <= 4) {
+        formattedValue = numbers;
+      } else if (numbers.length <= 6) {
+        formattedValue = `${numbers.slice(0, 4)}/${numbers.slice(4)}`;
+      } else {
+        formattedValue = `${numbers.slice(0, 4)}/${numbers.slice(4, 6)}/${numbers.slice(6, 8)}`;
+      }
+      
+      setDate(formattedValue);
+      newForm.date = formattedValue;
+      
+      // ตรวจสอบความถูกต้องของวันที่
+      validateDate(formattedValue);
     } else if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
       newForm[name] = e.target.checked;
     } else {
@@ -100,53 +147,193 @@ export default function EditLoadModal({
     'BAUMER', 'PROGRAM', 'TEMPERATURE', 'STERILIZATION TIME', 'VACUUM PULSE', 'DRYING TIME', 'END OF CYCLE', 'OPER',
     'STERILIE TIME', 'STOP TIME'
   ];
-  // ฟังก์ชันสำหรับดึงวันที่จากข้อความ OCR
-  const extractDateFromOCR = (text: string): string => {
-    if (!text) return '';
+  // ฟังก์ชันสำหรับแปลงวันที่เป็น Date object
+  const parseDate = (year: string, month: string, day: string): Date | null => {
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10) - 1; // เดือนใน JavaScript เริ่มที่ 0
+    const d = parseInt(day, 10);
     
-    // 1. ลองหาในรูปแบบ DATE: 2025-07-22 ก่อน
-    const datePrefixMatch = text.match(/DATE[:\s]+(\d{4}[-/]\d{1,2}[-/]\d{1,2})/i);
-    if (datePrefixMatch && datePrefixMatch[1]) {
-      const dateStr = datePrefixMatch[1];
-      const [year, month, day] = dateStr.split(/[-/]/);
-      return `${year.padStart(4, '0')}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+    // แปลงปี 2 หลักเป็น 4 หลัก (ถ้า < 50 เป็น 20xx, ถ้า >= 50 เป็น 19xx)
+    const fullYear = y < 100 ? (y < 50 ? 2000 + y : 1900 + y) : y;
+    
+    const date = new Date(fullYear, m, d);
+    
+    // ตรวจสอบว่าเป็นวันที่ถูกต้อง
+    if (isNaN(date.getTime())) {
+      return null;
     }
     
-    // 2. ลองหาวันที่ในรูปแบบต่างๆ
-    const patterns = [
-      // YYYY-MM-DD หรือ YYYY/MM/DD
-      /(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])/,
-      // DD-MM-YYYY หรือ DD/MM/YYYY
-      /(0?[1-9]|[12][0-9]|3[01])[-/](0?[1-9]|1[0-2])[-/](20\d{2})/,
-      // YYYYMMDD
-      /(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])/,
-    ];
+    // ตรวจสอบว่าวันที่ตรงกับค่าที่ใส่มาหรือไม่
+    if (date.getFullYear() !== fullYear || date.getMonth() !== m || date.getDate() !== d) {
+      return null;
+    }
+    
+    return date;
+  };
 
+  // ฟังก์ชันดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
+  const extractSterilizerInfo = (text: string): string => {
+    // รูปแบบที่รองรับ:
+    // - Total cycle no: 12345
+    // - cycle NR: 12345
+    // - Model: XXXXX-12345
+    // - number of cycle: 12345
+    const patterns = [
+      /(?:Total cycle no|cycle NR|number of cycle)[:\s]*([A-Za-z0-9-]+)/i,
+      /Model[:\s]*([A-Za-z0-9-]+)/i,
+      /(?:cycle|no|nr|#)[:\s]*(\d+)/i
+    ];
+    
     for (const pattern of patterns) {
       const match = text.match(pattern);
-      if (match) {
-        let year, month, day;
-        
-        if (match[0].includes('-') || match[0].includes('/')) {
-          const parts = match[0].split(/[-/]/);
-          if (parts[0].length === 4) {
-            [year, month, day] = parts;
-          } else {
-            [day, month, year] = parts;
-          }
-        } else if (match[0].length === 8) {
-          year = match[0].substring(0, 4);
-          month = match[0].substring(4, 6);
-          day = match[0].substring(6, 8);
-        }
-
-        if (year && month && day) {
-          return `${year.padStart(4, '0')}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
-        }
+      if (match && match[1]) {
+        return match[1].trim();
       }
     }
     
-    return '';
+    return ''; // ถ้าไม่พบข้อมูล
+  };
+
+  // ฟังก์ชันดึงเวลารวมจากข้อความ OCR
+  const extractTotalDuration = (text: string): string | null => {
+    // 1. หาจากรูปแบบต่างๆ ของเวลารวม
+    const durationPatterns = [
+      /(?:Total duration|Elapsed Time|Total time)[\s:]*([0-9]{1,2}:[0-9]{2})/i, // 1:23 or 01:23
+      /(?:Total duration|Elapsed Time|Total time)[\s:]*([0-9]+\s*[mM]\s*[0-9]+\s*[sS]?)/i, // 1m23 or 1 m 23 s
+      /(?:Total duration|Elapsed Time|Total time)[\s:]*([0-9]+(?:\.[0-9]+)?)\s*min/i // 1.5 min
+    ];
+
+    for (const pattern of durationPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        let duration = match[1].trim();
+        // แปลงรูปแบบให้เป็นนาที:วินาที
+        if (duration.includes('m') || duration.includes('M')) {
+          // แปลงจากรูปแบบ 1m23s หรือ 1 m 23 s เป็น 1:23
+          const parts = duration.split(/[mM]/).map(p => p.replace(/[^0-9]/g, ''));
+          if (parts.length === 2) {
+            const minutes = parts[0] === '' ? '0' : parts[0];
+            const seconds = parts[1].padStart(2, '0').substring(0, 2);
+            return `${minutes}:${seconds}`;
+          }
+        } else if (duration.includes('min')) {
+          // แปลงจากนาที.ทศนิยม เป็น นาที:วินาที
+          const minutes = parseFloat(duration);
+          if (!isNaN(minutes)) {
+            const mins = Math.floor(minutes);
+            const secs = Math.round((minutes - mins) * 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+          }
+        } else if (duration.includes(':')) {
+          // อยู่ในรูปแบบที่ถูกต้องอยู่แล้ว
+          return duration;
+        }
+      }
+    }
+
+    // 2. ถ้าไม่เจอเวลารวมโดยตรง ให้ลองหา Start time และ Stop time แล้วคำนวณหาผลต่าง
+    const startMatch = text.match(/Start time[\s:]*([0-9]{1,2}:[0-9]{2})/i);
+    const stopMatch = text.match(/Stop time[\s:]*([0-9]{1,2}:[0-9]{2})/i);
+    
+    if (startMatch && stopMatch) {
+      try {
+        const [startH, startM] = startMatch[1].split(':').map(Number);
+        const [stopH, stopM] = stopMatch[1].split(':').map(Number);
+        
+        let totalMinutes = (stopH * 60 + stopM) - (startH * 60 + startM);
+        if (totalMinutes < 0) totalMinutes += 24 * 60; // กรณีข้ามวัน
+        
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        
+        return hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}` : minutes.toString();
+      } catch (e) {
+        console.error('Error calculating duration from start/stop times:', e);
+      }
+    }
+
+    return null;
+  };
+
+  // ฟังก์ชันดึงวันที่จากข้อความ OCR
+  const extractDateFromOCR = (text: string): string | null => {
+    // รูปแบบวันที่ที่รองรับ: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY/MM/DD, YYYY-MM-DD, YYYY.MM.DD
+    const datePatterns = [
+      /(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/g, // DD/MM/YYYY
+      /(\d{4})[\/\-\.](\d{2})[\/\-\.](\d{2})/g, // YYYY/MM/DD
+    ];
+    
+    const dates: Date[] = [];
+    
+    // ค้นหาวันที่ทั้งหมดที่ตรงกับรูปแบบ
+    datePatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        let day, month, year;
+        
+        if (match[0].length === 10) {
+          // รูปแบบ YYYY/MM/DD
+          if (match[0].includes('/')) {
+            [year, month, day] = match[0].split('/').map(Number);
+          } else if (match[0].includes('-')) {
+            [year, month, day] = match[0].split('-').map(Number);
+          } else if (match[0].includes('.')) {
+            [year, month, day] = match[0].split('.').map(Number);
+          }
+        } else {
+          // รูปแบบ DD/MM/YYYY
+          if (match[0].includes('/')) {
+            [day, month, year] = match[0].split('/').map(Number);
+          } else if (match[0].includes('-')) {
+            [day, month, year] = match[0].split('-').map(Number);
+          } else if (match[0].includes('.')) {
+            [day, month, year] = match[0].split('.').map(Number);
+          }
+        }
+        
+        // สร้างวันที่และตรวจสอบความถูกต้อง
+        if (day && month && year) {
+          // แก้ไขปีให้เป็น พ.ศ. ถ้าน้อยกว่า 2500 (ค.ศ. 1957)
+          if (year < 2000) {
+            year += 543; // แปลง ค.ศ. เป็น พ.ศ.
+          }
+          
+          // ตรวจสอบความถูกต้องของวัน/เดือน/ปี
+          const dateObj: Date = new Date(year, month - 1, day);
+          if (
+            dateObj.getFullYear() === year &&
+            dateObj.getMonth() === month - 1 &&
+            dateObj.getDate() === day
+          ) {
+            dates.push(dateObj);
+          }
+        }
+      }
+    });
+    
+    // ถ้าไม่พบวันที่เลย
+    if (dates.length === 0) {
+      return null;
+    }
+    
+    // หาวันที่ที่เก่าที่สุด (วันที่น้อยที่สุด)
+    if (dates.length === 0) return null;
+    
+    // กำหนดค่าเริ่มต้นเป็นวันที่แรกในอาร์เรย์
+    const initialDate = dates[0];
+    
+    // ใช้ reduce โดยระบุ type annotation ให้ชัดเจน
+    const earliestDate = dates.slice(1).reduce<Date>(
+      (earliest: Date, current: Date) => current < earliest ? current : earliest,
+      initialDate
+    );
+    
+    // แปลงกลับเป็นรูปแบบ YYYY/MM/DD
+    const year = earliestDate.getFullYear();
+    const month = String(earliestDate.getMonth() + 1).padStart(2, '0');
+    const day = String(earliestDate.getDate()).padStart(2, '0');
+    
+    return `${year}/${month}/${day}`;
   };
 
   // handle upload image
@@ -186,32 +373,78 @@ export default function EditLoadModal({
           if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
           // ถ้าเป็นรูปที่ 1 (sterile slip) ให้ทำ OCR เพื่อหาและตั้งค่าวันที่
           try {
-            // จำลองการทำ OCR (ในที่นี้ใช้ Tesseract.js)
-            // ในกรณีจริงควรเรียกใช้ API OCR ที่คุณใช้
-            
-            // ตัวอย่างข้อความที่ได้จาก OCR (ในที่นี้จำลองว่ามีวันที่ 2025-07-22)
-            // ในกรณีจริงควรได้มาจาก OCR จริง
-            const ocrText = 'STERILE SLIP\nDATE: 2025-07-22\n...';
-            
+            // ใช้ข้อความ OCR ที่ได้จาก API โดยตรง
+            const ocrText = ocrRaw;
             console.log('OCR Text:', ocrText); // Debug log
             
             // ดึงวันที่จากข้อความ OCR
             const extractedDate = extractDateFromOCR(ocrText);
             console.log('Extracted Date:', extractedDate); // Debug log
             
+            // ดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
+            const sterilizerInfo = extractSterilizerInfo(ocrText);
+            
+            // ดึงเวลารวมจากข้อความ OCR
+            const totalDuration = extractTotalDuration(ocrText);
+            console.log('Extracted Total Duration:', totalDuration); // Debug log
+            
+            // อัปเดตสถานะฟอร์ม
+            const updates: any = {};
+            
             if (extractedDate) {
               setDate(extractedDate);
-              setEditForm((prev: any) => ({
-                ...prev,
-                date: extractedDate
-              }));
+              updates.date = extractedDate;
+            }
+            
+            if (sterilizerInfo) {
+              updates.sterilizer = sterilizerInfo;
+            }
+            
+            if (totalDuration) {
+              // แปลงรูปแบบเวลาเป็นนาที
+              let minutes = parseDurationToMinutes(totalDuration);
               
-              // แจ้งเตือนเมื่อพบและตั้งค่าวันที่แล้ว
+              // ถ้าเป็นโปรแกรม EO ให้แปลงนาทีเป็นชั่วโมง
+              if (editForm.program === 'EO') {
+                minutes = (parseInt(minutes) / 60).toFixed(2);
+              }
+              
+              updates.total_duration = minutes;
+            }
+            
+            setEditForm((prev: any) => ({
+              ...prev,
+              ...updates
+            }));
+            
+            // สร้างข้อความแจ้งเตือน
+            const messageParts = [];
+            
+            if (extractedDate) {
+              messageParts.push(`วันที่: ${extractedDate}`);
+            }
+            
+            if (sterilizerInfo) {
+              messageParts.push(`รอบการฆ่าเชื้อ: ${sterilizerInfo}`);
+            }
+            
+            if (totalDuration) {
+              if (editForm.program === 'EO') {
+                // แปลงนาทีเป็นชั่วโมงสำหรับโปรแกรม EO
+                const hours = (parseInt(totalDuration) / 60).toFixed(2);
+                messageParts.push(`เวลารวม: ${hours} ชั่วโมง`);
+              } else {
+                messageParts.push(`เวลารวม: ${totalDuration} นาที`);
+              }
+            }
+            
+            // แสดงการแจ้งเตือนข้อความเดียวที่รวมทุกข้อมูล
+            if (messageParts.length > 0) {
               Swal.fire({
-                title: 'พบวันที่ในสลิป',
-                text: `ตั้งค่าวันที่เป็น: ${extractedDate}`,
+                title: 'พบข้อมูลในสลิป',
+                html: messageParts.join('<br>'),
                 icon: 'success',
-                timer: 2000,
+                timer: 4000,  // เพิ่มเวลาแสดงข้อความเป็น 4 วินาที
                 showConfirmButton: false
               });
             }
@@ -256,8 +489,21 @@ export default function EditLoadModal({
             setImage2("");
             return;
           }
+          
+          // ตรวจสอบผล BI จาก OCR และตรวจสอบสติ๊กเกอร์ 3M
+          let biResult = '';
+          const lowerOcr = ocrRaw.toLowerCase();
+          const has3MSticker = ocrRaw.includes('3M') || lowerOcr.includes('3m');
+          
+          if (has3MSticker) {
+            biResult = 'ผ่าน';
+          } else if (lowerOcr.includes('accept') || lowerOcr.includes('pass') || lowerOcr.includes('ผ่าน')) {
+            biResult = 'ผ่าน';
+          } else if (lowerOcr.includes('reject') || lowerOcr.includes('fail') || lowerOcr.includes('ไม่ผ่าน')) {
+            biResult = 'ไม่ผ่าน';
+          }
 
-          // ลบโค้ด OCR extraction สำหรับตาราง + - ออก
+          // ดึงข้อมูลจาก OCR
           const lines = ocrRaw.split('\n').map((l: string) => l.trim()).filter(Boolean);
           // SN
           let sn = '';
@@ -273,9 +519,64 @@ export default function EditLoadModal({
             const timeMatch = timeLine.match(/(\d{2}:\d{2})/);
             if (timeMatch) time = timeMatch[1];
           }
+          // วันที่จาก Attest OCR
+          let attestDate = '';
+          // ตรวจสอบรูปแบบวันที่ YYYY-MM-DD
+          const dateMatch = ocrRaw.match(/(\d{4}-\d{2}-\d{2})/);
+          if (dateMatch) {
+            // แปลงรูปแบบจาก YYYY-MM-DD เป็น YYYY/MM/DD
+            attestDate = dateMatch[0].replace(/-/g, '/');
+          }
+          
           setAttestSN(sn);
           setAttestTime(time);
-          setEditForm((prev: any) => ({ ...prev, image_url_2: base64, attest_sn: sn, attest_time: time }));
+          const updates: any = {
+            image_url_2: base64,
+            attest_sn: sn,
+            attest_time: time
+          };
+          
+          // อัปเดตผล BI และตรวจสอบ 3M sticker
+          let alertMessages = [];
+          
+          if (has3MSticker) {
+            // ตรวจพบสติ๊กเกอร์ 3M ให้ติ๊กผ่านทั้งหมด
+            updates.bio_test = 'ผ่าน';
+            updates.chemical_external = 'ผ่าน';
+            updates.chemical_internal = 'ผ่าน';
+            updates.mechanical = 'ผ่าน';
+            
+            alertMessages.push('ตรวจพบสติ๊กเกอร์ 3M: ตั้งค่าผลตรวจสอบทั้งหมดเป็น "ผ่าน"');
+          } else if (biResult) {
+            // กรณีปกติที่ตรวจพบผล BI
+            updates.bio_test = biResult;
+          }
+          
+          // ถ้าเจอวันที่จาก Attest OCR ให้อัปเดตฟอร์ม
+          if (attestDate) {
+            setDate(attestDate);
+            updates.date = attestDate;
+            
+            // แจ้งเตือนเมื่อพบข้อมูล
+            let alertMessage = `ตั้งค่าวันที่จาก Attest: ${attestDate}`;
+            
+            // เพิ่มข้อความผล BI และ 3M ถ้ามี
+            if (has3MSticker) {
+              alertMessage += `\n${alertMessages.join('\n')}`;
+            } else if (biResult) {
+              alertMessage += `\nตรวจพบผลตรวจสอบ BI: ${biResult}`;
+            }
+            
+            Swal.fire({
+              title: 'พบข้อมูลใน Attest',
+              text: alertMessage,
+              icon: 'success',
+              timer: 4000,
+              showConfirmButton: false
+            });
+          }
+          
+          setEditForm((prev: any) => ({ ...prev, ...updates }));
         } catch (error) {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           return;
@@ -387,10 +688,47 @@ export default function EditLoadModal({
     setEditForm((prev: any) => ({ ...prev, attest_table: newTable }));
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // ตรวจสอบความถูกต้องของวันที่ก่อนบันทึก
+    if (!validateDate(date)) {
+      Swal.fire({
+        title: 'เกิดข้อผิดพลาด',
+        text: 'กรุณาตรวจสอบรูปแบบวันที่ให้ถูกต้อง (YYYY/MM/DD)',
+        icon: 'error',
+        confirmButtonText: 'ตกลง'
+      });
+      return;
+    }
+    
+    onSave(editForm);
+  };
+
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await Promise.resolve(onSave(editForm));
+      // Create a copy of the form data
+      const formData = { ...editForm };
+      
+      // Check if attest image is present but no BI test is selected
+      if (formData.image_url_2 && !formData.bio_test) {
+        await Swal.fire({
+          title: 'กรุณาเลือกผลตรวจสอบ BI',
+          text: 'กรุณาเลือกผลตรวจสอบตัวเชื้อทดสอบชีวภาพ (ผ่าน/ไม่ผ่าน) เนื่องจากมีรูป Attest อยู่',
+          icon: 'warning',
+          confirmButtonText: 'ตกลง',
+          confirmButtonColor: '#3085d6',
+        });
+        return;
+      }
+      
+      // Clear bio_test if no attest image is present
+      if (!formData.image_url_2) {
+        formData.bio_test = '';
+      }
+      
+      await Promise.resolve(onSave(formData));
       // Show success message with SweetAlert2
       await Swal.fire({
         title: 'สำเร็จ!',
@@ -454,20 +792,27 @@ export default function EditLoadModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]">
         <button className="absolute top-4 right-6 text-3xl text-gray-400 hover:text-red-500" onClick={() => setEditForm(null)}>&times;</button>
         <h2 className="text-2xl font-bold text-blue-900 mb-4">แก้ไขข้อมูลรอบการทำงาน</h2>
-        <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={handleSaveForm}>
+        <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={handleSubmit}>
           {/* ฟอร์มข้อมูลเหมือน LOAD IN DATA */}
           <div className="flex-1 min-w-[220px] flex flex-col gap-2 text-black">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ (ปี/เดือน/วัน)</label>
-                <input
-                  type="text"
-                  name="date"
-                  value={date}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded"
-                  placeholder="YYYY/MM/DD"
-                />
+                <div className="w-full">
+                  <input
+                    type="text"
+                    name="date"
+                    value={date}
+                    onChange={handleChange}
+                    className={`w-full px-3 py-2 border rounded ${dateError ? 'border-red-500' : ''}`}
+                    placeholder="YYYY/MM/DD"
+                    required
+                    maxLength={10}
+                  />
+                  {dateError && (
+                    <p className="text-red-500 text-xs mt-1">{dateError}</p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">รอบการฆ่าเชื้อที่</label>
@@ -517,8 +862,29 @@ export default function EditLoadModal({
 
             <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ (เฉพาะรอบที่ใช้ทดสอบ)</div>
             <div className="ml-2 text-black">ผล:
-              <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ผ่าน" checked={editForm?.bio_test === 'ผ่าน'} onChange={handleChange} /> ผ่าน</label>
-              <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ไม่ผ่าน" checked={editForm?.bio_test === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="bio_test" 
+                  value="ผ่าน" 
+                  checked={editForm?.image_url_2 ? editForm?.bio_test === 'ผ่าน' : false} 
+                  onChange={handleChange}
+                  disabled={!editForm?.image_url_2} // Disable if no attest image
+                /> ผ่าน
+              </label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="bio_test" 
+                  value="ไม่ผ่าน" 
+                  checked={editForm?.image_url_2 ? editForm?.bio_test === 'ไม่ผ่าน' : false} 
+                  onChange={handleChange}
+                  disabled={!editForm?.image_url_2} // Disable if no attest image
+                /> ไม่ผ่าน
+              </label>
+              {!editForm?.image_url_2 && (
+                <p className="text-sm text-gray-500 mt-1">กรุณาอัปโหลดรูป Attest เพื่อเปิดใช้งานการบันทึกผล BI</p>
+              )}
             </div>
             <label className="font-bold mt-2 text-black">เจ้าหน้าที่ Sterile <input name="sterile_staff" type="text" className="border rounded px-2 py-1 w-full text-black" value={editForm?.sterile_staff || ''} onChange={handleChange} /></label>
             <label className="font-bold text-black">ผู้อ่านผล <input name="result_reader" type="text" className="border rounded px-2 py-1 w-full text-black" value={editForm?.result_reader || ''} onChange={handleChange} /></label>
@@ -584,26 +950,10 @@ export default function EditLoadModal({
             {/* Attest Table & SN/Time */}
             <div className="mt-4">
               <div className="font-bold text-black mb-1">ผลตรวจสอบ Attest</div>
-              <table className="w-auto border text-xs text-black mb-2">
-                <thead>
-                  <tr>
-                    {[...Array(10)].map((_, i) => (
-                      <th key={i} className="border p-1 w-8 text-black">{i + 1}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {attestTable.map((v: string, i: number) => (
-                      <td key={i} className="border p-1 text-center cursor-pointer select-none text-black" onClick={() => handleAttestClick(i)}>
-                        {v}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-              <div className="flex gap-8 items-center mt-2">
+              
+              <div className="flex gap-4 items-center mt-2 flex-wrap">
                 <span className="text-black">SN: {attestSN || '-'}</span>
+                {date && <span className="text-black">วันที่: {date}</span>}
                 <span className="text-black">เวลา: {attestTime || '-'}</span>
                 <label className="font-bold text-black flex items-center gap-2">
   Total Duration
@@ -677,7 +1027,21 @@ export default function EditLoadModal({
                   onClick={e => {
                     e.stopPropagation();
                     setImage1("");
-                    setEditForm((prev: any) => ({ ...prev, image_url_1: "" }));
+                    setEditForm((prev: any) => ({ 
+                      ...prev, 
+                      image_url_1: "",
+                      // Clear autofilled data from sterile slip
+                      sterilizer_number: "",
+                      cycle_number: "",
+                      total_duration: ""
+                    }));
+                    Swal.fire({
+                      title: 'ลบรูปภาพ',
+                      text: 'ลบรูปภาพ Sterile Slip เรียบร้อย',
+                      icon: 'success',
+                      timer: 2000,
+                      showConfirmButton: false
+                    });
                   }}
                 >
                   ลบรูป
@@ -704,7 +1068,23 @@ export default function EditLoadModal({
                   onClick={e => {
                     e.stopPropagation();
                     setImage2("");
-                    setEditForm((prev: any) => ({ ...prev, image_url_2: "" }));
+                    setEditForm((prev: any) => ({ 
+                      ...prev, 
+                      image_url_2: "",
+                      // Clear autofilled data from attest
+                      attest_sn: "",
+                      attest_time: "",
+                      bio_test: ""
+                    }));
+                    setAttestSN("");
+                    setAttestTime("");
+                    Swal.fire({
+                      title: 'ลบรูปภาพ',
+                      text: 'ลบรูปภาพ Attest เรียบร้อย',
+                      icon: 'success',
+                      timer: 2000,
+                      showConfirmButton: false
+                    });
                   }}
                 >
                   ลบรูป
@@ -744,7 +1124,17 @@ export default function EditLoadModal({
           </div>
         </form>
         <div className="flex flex-col md:flex-row gap-2 md:gap-4 mt-4 w-full justify-center">
-          <button type="button" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded" onClick={handleSaveForm} disabled={loading}>
+          <button 
+            type="button" 
+            className={`font-bold py-2 px-8 rounded ${
+              loading || dateError || (editForm?.image_url_2 && !editForm?.bio_test)
+                ? 'bg-blue-400 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700'
+            } text-white`} 
+            onClick={handleSaveForm} 
+            disabled={loading || !!dateError || (editForm?.image_url_2 && !editForm?.bio_test)}
+            title={editForm?.image_url_2 && !editForm?.bio_test ? 'กรุณาเลือกผลตรวจสอบ BI' : ''}
+          >
             {loading ? "กำลังบันทึก..." : "บันทึก"}
           </button>
           <button type="button" className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-8 rounded" onClick={handleDeleteClick} disabled={deleteLoading}>
