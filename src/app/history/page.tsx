@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef } from "react";
@@ -56,18 +55,92 @@ import {
 export default function HistoryPage() {
   // ...
   const [clearAllFiltersTrigger, setClearAllFiltersTrigger] = useState(0);
+  // Generate year options (current year - 50 to current year + 10)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 61 }, (_, i) => (currentYear - 50 + i).toString());
+  
+  // Generate month options (1-12)
+  const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  
+  // Function to get days in a month
+  const getDaysInMonth = (year: string, month: string): string[] => {
+    if (!year || !month) {
+      // Return array of 31 days as strings when year or month is not selected
+      return Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+    }
+    const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+    return Array.from({ length: lastDay }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  };
 
-  // ...
+  // Filter function for input values
+  const filterNumericInput = (value: string, maxLength: number): string => {
+    // Only allow numbers and limit length
+    const numericValue = value.replace(/[^0-9]/g, '').slice(0, maxLength);
+    return numericValue;
+  };
+
+  const [dateRange, setDateRange] = useState({
+    startYear: '',
+    startMonth: '',
+    startDay: '',
+    endYear: '',
+    endMonth: '',
+    endDay: ''
+  });
+
+  // Get days for start and end date based on selected year and month
+  const startDays = getDaysInMonth(dateRange.startYear, dateRange.startMonth);
+  const endDays = getDaysInMonth(dateRange.endYear, dateRange.endMonth);
+
+  // Convert separate date parts to YYYY-MM-DD format
+  const formatDate = (year: string, month: string, day: string) => {
+    if (!year || !month || !day) return '';
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
+
+  const handleDatePartChange = (field: keyof typeof dateRange, value: string, maxLength?: number) => {
+    // Filter input if maxLength is provided
+    const filteredValue = maxLength ? filterNumericInput(value, maxLength) : value;
+    
+    const newDateRange = {
+      ...dateRange,
+      [field]: filteredValue
+    };
+    
+    // Reset day if month or year changes
+    if (field === 'startYear' || field === 'startMonth') {
+      newDateRange.startDay = '';
+    }
+    if (field === 'endYear' || field === 'endMonth') {
+      newDateRange.endDay = '';
+    }
+    
+    // Auto-format months and days to 2 digits if needed
+    if ((field === 'startMonth' || field === 'endMonth') && filteredValue.length === 1) {
+      newDateRange[field] = filteredValue.padStart(2, '0');
+    }
+    if ((field === 'startDay' || field === 'endDay') && filteredValue.length === 1) {
+      newDateRange[field] = filteredValue.padStart(2, '0');
+    }
+    
+    setDateRange(newDateRange);
+  };
+
   const handleClearAllFilters = () => {
-    setStartDate('');
-    setEndDate('');
-    setClearAllFiltersTrigger(t => t + 1); // trigger child reset
+    setClearAllFiltersTrigger(t => t + 1);
+    setDateRange({
+      startYear: '',
+      startMonth: '',
+      startDay: '',
+      endYear: '',
+      endMonth: '',
+      endDay: ''
+    });
   };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<SterilizerEntry[]>([]); // main entry state
   const [search, setSearch] = useState("");
-  const [date, setDate] = useState("");
   const [activeTab, setActiveTab] = useState<'manual' | 'ocr'>('manual');
   const [edit, setEdit] = useState<SterilizerEntry | null>(null);
   const [editForm, setEditForm] = useState<Partial<SterilizerEntry>>({});
@@ -87,9 +160,7 @@ export default function HistoryPage() {
   const [editOcrForm, setEditOcrForm] = useState<Partial<SterilizerEntry>>({});
   const [editOcrLoading, setEditOcrLoading] = useState(false);
   const [editOcrError, setEditOcrError] = useState("");
-  // 1. เพิ่ม state
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // State for form and UI
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>("");
   const [showOcrModal, setShowOcrModal] = useState(false);
@@ -633,8 +704,6 @@ export default function HistoryPage() {
       setForm(initialForm);
       setShowForm(false);
       setSearch("");
-      setStartDate("");
-      setEndDate("");
       setActiveTab("manual");
     } catch (err) {
       const errorMsg = (err as any)?.message || "เกิดข้อผิดพลาด";
@@ -793,36 +862,128 @@ export default function HistoryPage() {
         {/* Tab Navigation */}
         {/* ลบ JSX ปุ่ม tab navigation (ข้อมูลที่กรอกเอง/ข้อมูลจาก OCR) ออกทั้งหมด */}
         
-        <div className="w-full flex flex-col sm:flex-row gap-4 mb-6 items-end">
-          <label className="flex flex-col text-xs font-semibold text-gray-700">
-            ตั้งแต่วันที่
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="rounded px-3 py-2 border text-black"
-            />
-          </label>
-          <label className="flex flex-col text-xs font-semibold text-gray-700">
-            ถึงวันที่
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="rounded px-3 py-2 border text-black"
-            />
-          </label>
-          <button
-            className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded shadow text-xs mt-4 sm:mt-0"
-            onClick={handleClearAllFilters}
-            type="button"
-          >
-            ล้างตัวกรอง
-          </button>
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
+              <div className="flex space-x-2 items-center">
+                <div className="w-28">
+                  <input
+                    type="text"
+                    list="years"
+                    value={dateRange.startYear}
+                    onChange={(e) => handleDatePartChange('startYear', e.target.value, 4)}
+                    placeholder="ปี"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
+                  />
+                  <datalist id="years">
+                    {years.map(year => (
+                      <option key={`start-year-${year}`} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <span>/</span>
+                <div className="w-20">
+                  <input
+                    type="text"
+                    list="months"
+                    value={dateRange.startMonth}
+                    onChange={(e) => handleDatePartChange('startMonth', e.target.value, 2)}
+                    placeholder="เดือน"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
+                  />
+                  <datalist id="months">
+                    {months.map(month => (
+                      <option key={`start-month-${month}`} value={month}>
+                        {month}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <span>/</span>
+                <div className="w-20">
+                  <input
+                    type="text"
+                    list={`days-${dateRange.startYear}-${dateRange.startMonth}`}
+                    value={dateRange.startDay}
+                    onChange={(e) => handleDatePartChange('startDay', e.target.value, 2)}
+                    disabled={!dateRange.startYear || !dateRange.startMonth}
+                    placeholder="วัน"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border disabled:bg-gray-100"
+                  />
+                  <datalist id={`days-${dateRange.startYear}-${dateRange.startMonth}`}>
+                    {startDays.map((day: string) => (
+                      <option key={`start-day-${day}`} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
+              <div className="flex space-x-2 items-center">
+                <div className="w-28">
+                  <input
+                    type="text"
+                    list="years"
+                    value={dateRange.endYear}
+                    onChange={(e) => handleDatePartChange('endYear', e.target.value, 4)}
+                    placeholder="ปี"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
+                  />
+                </div>
+                <span>/</span>
+                <div className="w-20">
+                  <input
+                    type="text"
+                    list="months"
+                    value={dateRange.endMonth}
+                    onChange={(e) => handleDatePartChange('endMonth', e.target.value, 2)}
+                    placeholder="เดือน"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
+                  />
+                </div>
+                <span>/</span>
+                <div className="w-20">
+                  <input
+                    type="text"
+                    list={`days-${dateRange.endYear}-${dateRange.endMonth}`}
+                    value={dateRange.endDay}
+                    onChange={(e) => handleDatePartChange('endDay', e.target.value, 2)}
+                    disabled={!dateRange.endYear || !dateRange.endMonth}
+                    placeholder="วัน"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border disabled:bg-gray-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={handleClearAllFilters}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded shadow text-sm h-[42px] whitespace-nowrap w-full"
+                type="button"
+              >
+                ล้างตัวกรองทั้งหมด
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ลบตารางเดิมออก แล้วแสดงข้อมูล sterilizer_loads แบบ Card view */}
-        <SterilizerLoadsCardView user={user} startDate={startDate} endDate={endDate} clearAllFiltersTrigger={clearAllFiltersTrigger} />
+        <SterilizerLoadsCardView 
+          user={user} 
+          clearAllFiltersTrigger={clearAllFiltersTrigger} 
+          dateRange={{
+            startDate: formatDate(dateRange.startYear, dateRange.startMonth, dateRange.startDay),
+            endDate: formatDate(dateRange.endYear, dateRange.endMonth, dateRange.endDay)
+          }}
+        />
         
         {/* Modal Edit */}
         {edit && (
