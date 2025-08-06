@@ -4,7 +4,20 @@ import { saveAs } from 'file-saver';
 import { getFirestore, collection, query, orderBy, onSnapshot, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import EditLoadModal from './EditLoadModal';
 
-export default function SterilizerLoadsCardView({ user, startDate, endDate, clearAllFiltersTrigger }: { user: any, startDate?: string, endDate?: string, clearAllFiltersTrigger?: number }) {
+interface SterilizerLoadsCardViewProps {
+  user: any;
+  clearAllFiltersTrigger?: number;
+  dateRange?: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+export default function SterilizerLoadsCardView({ 
+  user, 
+  clearAllFiltersTrigger,
+  dateRange = { startDate: '', endDate: '' } 
+}: SterilizerLoadsCardViewProps) {
   // State สำหรับ Card View
   const [loads, setLoads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +26,8 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
   const cardsPerPage = 6;
   const [currentPage, setCurrentPage] = useState(1);
   const [selected, setSelected] = useState<any | null>(null);
+  const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
+  const cardRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
   // เพิ่ม state สำหรับ modal edit
   const [editForm, setEditForm] = useState<any | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -51,11 +66,48 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
     const db = getFirestore();
     const q = query(collection(db, 'sterilizer_loads'), orderBy('created_at', 'desc'));
     const unsub = onSnapshot(q, (snapshot) => {
-      setLoads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const updatedLoads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLoads(updatedLoads);
+      
+      // ตรวจสอบว่ามีการเพิ่มข้อมูลใหม่หรือไม่
+      if (updatedLoads.length > 0 && (loads.length === 0 || updatedLoads[0].id !== loads[0]?.id)) {
+        setLastUpdatedId(updatedLoads[0].id);
+        setCurrentPage(1); // กลับไปที่หน้าแรกเมื่อมีการเพิ่มข้อมูลใหม่
+      }
+      
       setLoading(false);
     });
     return () => unsub();
   }, []);
+  
+  // Effect สำหรับ scroll ไปที่การ์ดที่เพิ่งอัปเดต
+  useEffect(() => {
+    if (lastUpdatedId && cardRefs.current[lastUpdatedId]) {
+      // เพิ่มคลาสไฮไลต์
+      const card = cardRefs.current[lastUpdatedId];
+      if (card) {
+        // ใช้ requestAnimationFrame เพื่อให้แน่ใจว่า DOM ได้อัปเดตแล้ว
+        requestAnimationFrame(() => {
+          card.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center',
+            inline: 'nearest'
+          });
+          
+          // เพิ่มคลาสไฮไลต์
+          card.classList.add('ring-4', 'ring-green-500', 'ring-opacity-75');
+          
+          // ลบไฮไลต์หลังจาก 3 วินาที
+          const timer = setTimeout(() => {
+            card.classList.remove('ring-4', 'ring-green-500', 'ring-opacity-75');
+            setLastUpdatedId(null);
+          }, 3000);
+          
+          return () => clearTimeout(timer);
+        });
+      }
+    }
+  }, [lastUpdatedId, currentPage]);
 
   // Reset all filters when clearAllFiltersTrigger changes
   useEffect(() => {
@@ -71,18 +123,30 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
   }, [clearAllFiltersTrigger]);
 
   // ฟังก์ชัน filter, pagination
-  // ปรับ filter ให้รองรับช่วงวันที่
   const filteredLoads = loads.filter(load => {
+    // Date range filter
+    if (dateRange?.startDate || dateRange?.endDate) {
+      const loadDate = load.date || load.test_date;
+      if (!loadDate) return false;
+      
+      const entryDate = new Date(loadDate);
+      entryDate.setHours(0, 0, 0, 0);
+      
+      if (dateRange.startDate) {
+        const startDate = new Date(dateRange.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        if (entryDate < startDate) return false;
+      }
+      
+      if (dateRange.endDate) {
+        const endDate = new Date(dateRange.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        if (entryDate > endDate) return false;
+      }
+    }
+    
     // SN Filter (ใช้ attest_sn)
     if (snFilter && load.attest_sn !== snFilter) return false;
-    // กรองตามช่วงวันที่
-    if (startDate || endDate) {
-      const dateStr = load.date || load.test_date;
-      if (!dateStr) return false;
-      const entryDate = new Date(dateStr);
-      if (startDate && entryDate < new Date(startDate)) return false;
-      if (endDate && entryDate > new Date(endDate)) return false;
-    }
     // กรองประเภท
     if (filter !== 'All') {
       const prog = (load.program || '').toUpperCase();
@@ -138,18 +202,36 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
     setEditError("");
     try {
       const db = getFirestore();
-      await updateDoc(doc(db, 'sterilizer_loads', formData.id), {
+      const updateData = {
         ...formData,
         attest_sn: formData.attest_sn || '',
         attest_time: formData.attest_time || '',
         total_duration: formData.total_duration || '',
-      });
+        updated_at: new Date(),
+      };
+      
+      await updateDoc(doc(db, 'sterilizer_loads', formData.id), updateData);
+      
+      // Set the last updated ID for highlighting
+      setLastUpdatedId(formData.id);
+      
+      // Reset form and refresh data
       setEditForm(null);
       setLoading(true);
+      
       // Refresh loads
       const q = query(collection(db, 'sterilizer_loads'), orderBy('created_at', 'desc'));
       const snap = await getDocs(q);
-      setLoads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const updatedLoads = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLoads(updatedLoads);
+      
+      // Find the page with the updated card
+      const updatedIndex = updatedLoads.findIndex(load => load.id === formData.id);
+      if (updatedIndex >= 0) {
+        const page = Math.floor(updatedIndex / cardsPerPage) + 1;
+        setCurrentPage(page);
+      }
+      
       setLoading(false);
     } catch (err: any) {
       setEditError(err.message || "เกิดข้อผิดพลาด");
@@ -166,6 +248,7 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
       const db = getFirestore();
       await deleteDoc(doc(db, 'sterilizer_loads', id));
       setEditForm(null);
+      setLastUpdatedId(null);
       setLoading(true);
       // Refresh loads
       const q = query(collection(db, 'sterilizer_loads'), orderBy('created_at', 'desc'));
@@ -345,19 +428,34 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
       {/* Filtered count */}
       <div className="mb-2 text-gray-700 font-semibold">แสดง {filteredLoads.length} รายการ</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mt-4">
-        {paginatedLoads.map(load => (
-          <div key={`${load.date || ''}-${load.program || ''}-${load.created_at?.seconds || ''}`} className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-blue-200 flex flex-col gap-4 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-            onClick={e => {
-              if ((e.target as HTMLElement).tagName === 'IMG' || (e.target as HTMLElement).closest('button,input,label')) return;
-              setEditForm(load);
-            }}
+        {paginatedLoads.map(load => {
+          // Create a ref callback that handles the element assignment
+          const setCardRef = (el: HTMLDivElement | null) => {
+            if (el) {
+              cardRefs.current[load.id] = el;
+            } else {
+              delete cardRefs.current[load.id];
+            }
+          };
+          
+          return (
+            <div 
+              key={load.id}
+              ref={setCardRef}
+              className={`bg-white rounded-2xl shadow-lg p-6 mb-6 border border-blue-200 flex flex-col gap-4 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all ${
+                lastUpdatedId === load.id ? 'ring-4 ring-green-500 ring-opacity-75' : ''
+              }`}
+              onClick={e => {
+                if ((e.target as HTMLElement).tagName === 'IMG' || (e.target as HTMLElement).closest('button,input,label')) return;
+                setEditForm(load);
+              }}
           >
             {/* Header - Blue row on top */}
             <div className="flex items-center justify-between mb-2">
               <div className="font-bold text-lg text-blue-700">
                 {load.date || "-"} | {load.sterilizer || "-"}
               </div>
-              <div className="text-xs text-gray-400">{load.program || "-"}</div>
+              <div className="text-base font-bold text-black">{load.program || "-"}</div>
             </div>
             {/* SN, เวลา, Duration Display - Black row below */}
             {(load.attest_sn || load.attest_time || load.total_duration) && (
@@ -421,8 +519,9 @@ export default function SterilizerLoadsCardView({ user, startDate, endDate, clea
                 </div>
               ))}
             </div>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
       {/* Pagination Controls */}
       {totalPages > 1 && (
