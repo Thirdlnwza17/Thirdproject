@@ -216,7 +216,7 @@ export default function EditLoadModal({
     for (const pattern of durationPatterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
-        let duration = match[1].trim();
+        const duration = match[1].trim();
         // แปลงรูปแบบให้เป็นนาที:วินาที
         if (duration.includes('m') || duration.includes('M')) {
           // แปลงจากรูปแบบ 1m23s หรือ 1 m 23 s เป็น 1:23
@@ -547,7 +547,7 @@ export default function EditLoadModal({
           };
           
           // อัปเดตผล BI และตรวจสอบ 3M sticker
-          let alertMessages = [];
+          const alertMessages = [];
           
           if (has3MSticker) {
             // ตรวจพบสติ๊กเกอร์ 3M ให้ติ๊กผ่านทั้งหมด
