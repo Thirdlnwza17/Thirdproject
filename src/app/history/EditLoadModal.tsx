@@ -2,8 +2,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
-
 import { User } from 'firebase/auth';
+
+type ImageSourceType = 'camera' | 'file' | null;
 
 export default function EditLoadModal({ 
   editForm, 
@@ -26,12 +27,21 @@ export default function EditLoadModal({
   allLoads: any[],
   user: User | null
 }) {
-    // refs สำหรับ input file ซ่อน
+    // refs สำหรับ input file และ video
   const slipInputRef = useRef<HTMLInputElement>(null);
   const attestInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
   // State สำหรับรูป
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
   const [image2, setImage2] = useState(editForm.image_url_2 || "");
+  
+  // State สำหรับจัดการ modal และกล้อง
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [currentImageIdx, setCurrentImageIdx] = useState<1 | 2 | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  
   // State สำหรับวันที่
   const [date, setDate] = useState(editForm.date || "");
   const [dateError, setDateError] = useState("");
@@ -787,6 +797,165 @@ export default function EditLoadModal({
     }
   };
 
+  // เริ่มต้นกล้อง
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      Swal.fire('ผิดพลาด', 'ไม่สามารถเข้าถึงกล้องได้', 'error');
+    }
+  };
+
+  // หยุดกล้อง
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  };
+
+  // ถ่ายรูป
+  const captureImage = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+      
+      // ตั้งค่าขนาด canvas ให้เท่ากับวิดีโอ
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // วาดรูปจากวิดีโอลง canvas
+      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // แปลง canvas เป็น base64
+      const imageDataUrl = canvas.toDataURL('image/jpeg');
+      
+      // ปิดกล้อง
+      stopCamera();
+      setShowCameraModal(false);
+      
+      // ส่งรูปไปยัง handleUpload
+      if (currentImageIdx) {
+        // สร้าง File object จาก base64
+        const byteString = atob(imageDataUrl.split(',')[1]);
+        const mimeString = imageDataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        
+        const blob = new Blob([ab], { type: mimeString });
+        const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        
+        handleUpload(currentImageIdx, file);
+      }
+    }
+  };
+
+  // เปิด modal เลือกแหล่งที่มาของรูป
+  const openImageSourceModal = (idx: 1 | 2) => {
+    setCurrentImageIdx(idx);
+    setShowCameraModal(true);
+  };
+
+  // เมื่อเลือกแหล่งที่มาของรูป
+  const handleImageSourceSelect = (source: 'camera' | 'file') => {
+    if (source === 'camera') {
+      startCamera();
+    } else {
+      // เปิด file picker
+      if (currentImageIdx === 1 && slipInputRef.current) {
+        slipInputRef.current.click();
+      } else if (currentImageIdx === 2 && attestInputRef.current) {
+        attestInputRef.current.click();
+      }
+      setShowCameraModal(false);
+    }
+  };
+
+  // เมื่อ component unmount ให้หยุดกล้อง
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
+  // Modal เลือกแหล่งที่มาของรูป
+  const ImageSourceModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-80">
+        <h3 className="text-lg font-bold mb-4">เลือกแหล่งที่มาของรูป</h3>
+        <div className="flex flex-col space-y-4">
+          <button
+            onClick={() => handleImageSourceSelect('camera')}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            ถ่ายรูป
+          </button>
+          <button
+            onClick={() => handleImageSourceSelect('file')}
+            className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+          >
+            เลือกจากแกลเลอรี่
+          </button>
+          <button
+            onClick={() => setShowCameraModal(false)}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mt-4"
+          >
+            ยกเลิก
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Modal กล้องถ่ายรูป
+  const CameraModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50">
+      <div className="w-full max-w-md">
+        <div className="relative bg-black rounded-lg overflow-hidden">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="w-full h-auto"
+          />
+          <canvas ref={canvasRef} className="hidden" />
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex justify-center space-x-4">
+            <button
+              onClick={captureImage}
+              className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white"
+            >
+              <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              stopCamera();
+              setShowCameraModal(false);
+            }}
+            className="absolute top-4 right-4 text-white text-2xl"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]">
@@ -956,22 +1125,22 @@ export default function EditLoadModal({
                 {date && <span className="text-black">วันที่: {date}</span>}
                 <span className="text-black">เวลา: {attestTime || '-'}</span>
                 <label className="font-bold text-black flex items-center gap-2">
-  Total Duration
-  <span className="flex items-center gap-1">
-    <input
-      name="total_duration"
-      type="text"
-      className="border rounded px-2 py-1 w-20 text-black text-right"
-      value={editForm?.total_duration || ''}
-      onChange={e => {
-        const normalized = parseDurationToMinutes(e.target.value);
-        setEditForm({ ...editForm, total_duration: normalized });
-      }}
-      placeholder="From sterile slip"
-    />
-    
-  </span>
-</label>
+                  Total Duration
+                  <span className="flex items-center gap-1">
+                    <input
+                      name="total_duration"
+                      type="text"
+                      className="border rounded px-2 py-1 w-20 text-black text-right"
+                      value={editForm?.total_duration || ''}
+                      onChange={e => {
+                        const normalized = parseDurationToMinutes(e.target.value);
+                        setEditForm({ ...editForm, total_duration: normalized });
+                      }}
+                      placeholder="From sterile slip"
+                    />
+                    
+                  </span>
+                </label>
               </div>
             </div>
           </div>
@@ -981,7 +1150,7 @@ export default function EditLoadModal({
               tabIndex={0}
               className="w-full max-w-[95vw] md:max-w-[900px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-hidden relative cursor-pointer"
               style={{ maxHeight: '60vh', height: '60vh', touchAction: 'none' }}
-              onClick={() => slipInputRef.current?.click()}
+              onClick={() => openImageSourceModal(1)}
             >
               {image1 ? (
                 <img
@@ -1011,14 +1180,14 @@ export default function EditLoadModal({
             <div className="flex gap-2 items-center">
               <input
                 type="file"
-                accept=".pdf,.jpg,.jpeg,image/*"
+                accept="image/*"
                 ref={slipInputRef}
-                style={{ display: 'none' }}
-                onChange={e => {
+                onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleUpload(1, e.target.files[0]);
                   }
                 }}
+                className="hidden"
               />
               {image1 && (
                 <button 
@@ -1052,14 +1221,14 @@ export default function EditLoadModal({
             <div className="flex gap-2 items-center">
               <input
                 type="file"
-                accept=".pdf,.jpg,.jpeg,image/*"
+                accept="image/*"
                 ref={attestInputRef}
-                style={{ display: 'none' }}
-                onChange={e => {
+                onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleUpload(2, e.target.files[0]);
                   }
                 }}
+                className="hidden"
               />
               {editForm.image_url_2 && (
                 <button 
@@ -1095,7 +1264,7 @@ export default function EditLoadModal({
               tabIndex={0}
               className="w-full max-w-[95vw] md:max-w-[900px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-hidden relative cursor-pointer"
               style={{ maxHeight: '60vh', height: '60vh', touchAction: 'none' }}
-              onClick={() => attestInputRef.current?.click()}
+              onClick={() => openImageSourceModal(2)}
             >
               {editForm.image_url_2 ? (
                 <img
@@ -1181,6 +1350,11 @@ export default function EditLoadModal({
           </div>
         </div>
       )}
+      {/* Image Source Selection Modal */}
+      {showCameraModal && !stream && <ImageSourceModal />}
+      
+      {/* Camera Modal */}
+      {showCameraModal && stream && <CameraModal />}
     </div>
   );
-} 
+}
