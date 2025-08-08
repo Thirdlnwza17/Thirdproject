@@ -20,7 +20,7 @@ export default function DuplicateModal({ show, onClose, duplicateType, duplicate
         >
           ×
         </button>
-        <h2 className="text-xl font-bold mb-4 text-orange-600">⚠️ พบข้อมูลซ้ำ</h2>
+        <h2 className="text-xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-cyan-400 bg-clip-text text-transparent">⚠️ พบข้อมูลซ้ำ</h2>
         <div className="mb-4">
           {duplicateType === 'both' && (
             <p className="text-gray-700">พบข้อมูลซ้ำทั้งรูปภาพและข้อความที่ถอดได้</p>
