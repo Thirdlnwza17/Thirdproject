@@ -423,7 +423,13 @@ export default function EditLoadModal({
         load.image_url_1 === base64 || load.image_url_2 === base64
       );
       if (isDuplicate) {
-        alert('ไม่สามารถแนบรูปซ้ำกับข้อมูลอื่นในระบบได้');
+        await Swal.fire({
+          title: 'รูปภาพซ้ำ',
+          text: 'ไม่สามารถแนบรูปซ้ำกับข้อมูลอื่นในระบบได้',
+          icon: 'warning',
+          confirmButtonText: 'ตกลง',
+          confirmButtonColor: '#3b82f6',
+        });
         return;
       }
       if (idx === 1) {
@@ -444,7 +450,13 @@ export default function EditLoadModal({
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword.toUpperCase()));
           if (!isSlip) {
-            alert('ไม่อนุญาตให้อัปโหลด: ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง');
+            await Swal.fire({
+              title: 'รูปภาพไม่ถูกต้อง',
+              text: 'ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง',
+              icon: 'warning',
+              confirmButtonText: 'ตกลง',
+              confirmButtonColor: '#3b82f6',
+            });
             return;
           }
           if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
@@ -558,7 +570,13 @@ export default function EditLoadModal({
           // ตรวจสอบว่าเป็น Auto Reader 490 หรือ 390G หรือไม่
           const isAutoReader = ocrRaw.includes('490') || ocrRaw.toUpperCase().includes('390G');
           if (!isAutoReader) {
-            alert('ไม่อนุญาตให้อัปโหลด: ไม่ใช่เอกสารจากเครื่อง Auto Reader 490 หรือ 390G');
+            await Swal.fire({
+              title: 'เอกสารไม่ถูกต้อง',
+              text: 'ไม่อนุญาตให้อัปโหลด: ไม่ใช่เอกสารจากเครื่อง Auto Reader 490 หรือ 390G',
+              icon: 'warning',
+              confirmButtonText: 'ตกลง',
+              confirmButtonColor: '#3b82f6',
+            });
             setImage2("");
             return;
           }

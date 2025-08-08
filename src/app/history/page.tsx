@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
+import Swal from 'sweetalert2';
 import { auth } from "../../firebaseConfig";
 import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -306,7 +307,13 @@ export default function HistoryPage() {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     if (file.type === 'application/pdf') {
-      alert('ไม่รองรับการอัปโหลดไฟล์ PDF');
+      await Swal.fire({
+        title: 'ไม่รองรับไฟล์ PDF',
+        text: 'ระบบไม่รองรับการอัปโหลดไฟล์ PDF กรุณาอัปโหลดไฟล์รูปภาพแทน',
+        icon: 'error',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     } else if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -330,7 +337,13 @@ export default function HistoryPage() {
           // ตรวจสอบ keyword
           const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword));
           if (!isSlip) {
-            alert('ไม่อนุญาตให้อัปโหลด: ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง');
+            await Swal.fire({
+              title: 'รูปภาพไม่ถูกต้อง',
+              text: 'ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง',
+              icon: 'warning',
+              confirmButtonText: 'ตกลง',
+              confirmButtonColor: '#3b82f6',
+            });
             return;
           }
           // ถ้าใช่ slip จริง ค่อยเปิด modal OCR ต่อ
@@ -347,7 +360,13 @@ export default function HistoryPage() {
       };
       reader.readAsDataURL(file);
     } else {
-      alert('รองรับเฉพาะไฟล์รูปภาพหรือ PDF เท่านั้น');
+      await Swal.fire({
+        title: 'รูปแบบไฟล์ไม่รองรับ',
+        text: 'ระบบรองรับเฉพาะไฟล์รูปภาพเท่านั้น',
+        icon: 'error',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      });
     }
   };
 

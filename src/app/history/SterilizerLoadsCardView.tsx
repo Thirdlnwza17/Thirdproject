@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import Swal from 'sweetalert2';
 import { saveAs } from 'file-saver';
 import { getFirestore, collection, query, orderBy, onSnapshot, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import EditLoadModal from './EditLoadModal';
@@ -297,9 +298,15 @@ export default function SterilizerLoadsCardView({
   if (loads.length === 0) return <div className="text-center text-gray-400 py-12 text-lg">ยังไม่มีข้อมูลรอบการทำงาน</div>;
 
   // --- Export CSV ---
-  function handleExportCsv() {
+  async function handleExportCsv() {
     if (!filteredLoads || filteredLoads.length === 0) {
-      alert("ไม่มีข้อมูลให้ export");
+      await Swal.fire({
+        title: 'ไม่พบข้อมูล',
+        text: 'ไม่มีข้อมูลให้ export',
+        icon: 'info',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
     // Define CSV headers
