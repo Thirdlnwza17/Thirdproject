@@ -447,8 +447,11 @@ export default function DashboardPage() {
         <div className="w-full flex flex-row items-center mb-4">
           <img src="/ram-logo.jpg" alt="Sterilizer Logo" className="w-40 h-40 object-contain drop-shadow-xl bg-white rounded-2xl p-2 mr-4" />
           <div className="flex flex-col justify-center">
-            <h1 className="text-2xl md:text-3xl font-bold text-blue-900 mb-2 drop-shadow text-center">(Central Supply Sterile Quality information system)</h1>
-            <p className="text-lg md:text-xl text-blue-800 mb-4 text-center">ระบบข้อมูลการติดตามคุณภาพการทำฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์</p>
+            <h1 className="text-2xl md:text-3xl font-bold mb-2 drop-shadow text-center">
+              <span className="text-sky-400">Central Supply Sterile Quality</span>{' '}
+              <span className="text-blue-700">information system</span>
+            </h1>
+            <p className="text-lg md:text-xl text-cyan-600 mb-4 text-center">ระบบข้อมูลการติดตามคุณภาพการทำฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์</p>
           </div>
         </div>
         {/* Status Widgets - Enhanced */}
