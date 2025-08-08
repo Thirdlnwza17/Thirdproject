@@ -206,7 +206,19 @@ export default function EditLoadModal({
 
   // ฟังก์ชันดึงเวลารวมจากข้อความ OCR
   const extractTotalDuration = (text: string): string | null => {
-    // 1. หาจากรูปแบบต่างๆ ของเวลารวม
+    // 1. หาจากรูปแบบ "TOTAL TIME: XX MIN" (รูปแบบจากใบรับรองเครื่อง PREVAC)
+    const prevacTimeMatch = text.match(/TOTAL\s*TIME\s*[\:\s]+(\d+)\s*MIN/i);
+    if (prevacTimeMatch) {
+      return prevacTimeMatch[1]; // Return just the number of minutes
+    }
+    
+    // 2. หาจากรูปแบบ "TOTAL DURATION:26min." (รูปแบบจากใบรับรองเครื่อง BOWIE)
+    const bowieTimeMatch = text.match(/TOTAL\s*DURATION\s*[\:\s]*(\d+)\s*min\.?/i);
+    if (bowieTimeMatch) {
+      return bowieTimeMatch[1]; // Return just the number of minutes
+    }
+    
+    // 3. หาจากรูปแบบต่างๆ ของเวลารวม
     const durationPatterns = [
       /(?:Total duration|Elapsed Time|Total time)[\s:]*([0-9]{1,2}:[0-9]{2})/i, // 1:23 or 01:23
       /(?:Total duration|Elapsed Time|Total time)[\s:]*([0-9]+\s*[mM]\s*[0-9]+\s*[sS]?)/i, // 1m23 or 1 m 23 s
@@ -267,83 +279,138 @@ export default function EditLoadModal({
 
   // ฟังก์ชันดึงวันที่จากข้อความ OCR
   const extractDateFromOCR = (text: string): string | null => {
-    // รูปแบบวันที่ที่รองรับ: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY/MM/DD, YYYY-MM-DD, YYYY.MM.DD
+    // รองรับรูปแบบวันที่หลายรูปแบบ
     const datePatterns = [
-      /(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/g, // DD/MM/YYYY
-      /(\d{4})[\/\-\.](\d{2})[\/\-\.](\d{2})/g, // YYYY/MM/DD
+      // รูปแบบ YYYY/MM/DD หรือ YYYY-MM-DD หรือ YYYY.MM.DD
+      /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/g,
+      // รูปแบบ DD/MM/YYYY หรือ DD-MM-YYYY หรือ DD.MM.YYYY
+      /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g,
+      // รูปแบบ YY/MM/DD หรือ YY-MM-DD (ปี 2 หลัก)
+      /(\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/g,
+      // รูปแบบ DATE: DD/MM/YY หรือ DATE:DD/MM/YY
+      /DATE\s*[\:\s]\s*(\d{1,2})[\/\-](\d{1,2})[\/\-]?(\d{2,4})?/gi,
     ];
     
     const dates: Date[] = [];
     
     // ค้นหาวันที่ทั้งหมดที่ตรงกับรูปแบบ
-    datePatterns.forEach(pattern => {
-      let match;
+    for (const pattern of datePatterns) {
+      let match: RegExpExecArray | null;
+      pattern.lastIndex = 0; // Reset the regex state
+      
       while ((match = pattern.exec(text)) !== null) {
-        let day, month, year;
-        
-        if (match[0].length === 10) {
-          // รูปแบบ YYYY/MM/DD
-          if (match[0].includes('/')) {
-            [year, month, day] = match[0].split('/').map(Number);
-          } else if (match[0].includes('-')) {
-            [year, month, day] = match[0].split('-').map(Number);
-          } else if (match[0].includes('.')) {
-            [year, month, day] = match[0].split('.').map(Number);
-          }
-        } else {
-          // รูปแบบ DD/MM/YYYY
-          if (match[0].includes('/')) {
-            [day, month, year] = match[0].split('/').map(Number);
-          } else if (match[0].includes('-')) {
-            [day, month, year] = match[0].split('-').map(Number);
-          } else if (match[0].includes('.')) {
-            [day, month, year] = match[0].split('.').map(Number);
-          }
-        }
-        
-        // สร้างวันที่และตรวจสอบความถูกต้อง
-        if (day && month && year) {
-          // แก้ไขปีให้เป็น พ.ศ. ถ้าน้อยกว่า 2500 (ค.ศ. 1957)
-          if (year < 2000) {
-            year += 543; // แปลง ค.ศ. เป็น พ.ศ.
+        try {
+          let day: number | undefined;
+          let month: number | undefined;
+          let year: number | undefined;
+          
+          // ตรวจสอบรูปแบบวันที่
+          if (match[0].toUpperCase().startsWith('DATE')) {
+            // กรณีที่ขึ้นต้นด้วย DATE:
+            day = match[1] ? parseInt(match[1], 10) : undefined;
+            month = match[2] ? parseInt(match[2], 10) : undefined;
+            year = match[3] ? parseInt(match[3], 10) : new Date().getFullYear() % 100;
+          } else if (match[0].includes('/') || match[0].includes('-') || match[0].includes('.')) {
+            // กรณีรูปแบบอื่นๆ
+            const parts = match[0].split(/[\/\-\.]/);
+            if (parts[0].length === 4) {
+              // YYYY/MM/DD
+              year = parseInt(parts[0], 10);
+              month = parts[1] ? parseInt(parts[1], 10) : undefined;
+              day = parts[2] ? parseInt(parts[2], 10) : undefined;
+            } else if (parts[2] && parts[2].length <= 2) {
+              // DD/MM/YY หรือ DD/MM/YYYY
+              day = parts[0] ? parseInt(parts[0], 10) : undefined;
+              month = parts[1] ? parseInt(parts[1], 10) : undefined;
+              year = parts[2] ? parseInt(parts[2], 10) : undefined;
+            } else {
+              // DD/MM/YYYY
+              day = parts[0] ? parseInt(parts[0], 10) : undefined;
+              month = parts[1] ? parseInt(parts[1], 10) : undefined;
+              year = parts[2] ? parseInt(parts[2], 10) : undefined;
+            }
           }
           
-          // ตรวจสอบความถูกต้องของวัน/เดือน/ปี
-          const dateObj: Date = new Date(year, month - 1, day);
-          if (
-            dateObj.getFullYear() === year &&
-            dateObj.getMonth() === month - 1 &&
-            dateObj.getDate() === day
-          ) {
-            dates.push(dateObj);
+          // ตรวจสอบว่ามีข้อมูลวันที่ครบถ้วน
+          if (day !== undefined && month !== undefined && year !== undefined) {
+            // แปลงปี 2 หลักเป็น 4 หลัก (ถ้าจำเป็น)
+            if (year < 100) {
+              const currentYear = new Date().getFullYear();
+              const currentCentury = Math.floor(currentYear / 100) * 100;
+              year += currentCentury;
+              if (year > currentYear + 50) year -= 100; // ปรับให้เป็นศตวรรษที่แล้วถ้าปีเกินไป 50 ปี
+            }
+            
+            // ใช้ปีตามที่ได้มาโดยไม่ต้องแปลงเป็น พ.ศ.
+            
+            // ตรวจสอบความถูกต้องของวัน/เดือน/ปี
+            const dateObj = new Date(year, month - 1, day);
+            if (
+              dateObj.getFullYear() === year &&
+              dateObj.getMonth() === month - 1 &&
+              dateObj.getDate() === day
+            ) {
+              dates.push(dateObj);
+            }
           }
+        } catch (e) {
+          console.error('Error parsing date:', e);
         }
       }
-    });
+    }
     
-    // ถ้าไม่พบวันที่เลย
+    // ถ้าไม่พบวันที่
+    if (dates.length === 0) {
+      // ลองหาเฉพาะตัวเลขที่อาจเป็นวันที่
+      const simpleDateMatch = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.]?(\d{2,4}))?\b/);
+      if (simpleDateMatch) {
+        try {
+          const day = simpleDateMatch[1] ? parseInt(simpleDateMatch[1], 10) : undefined;
+          const month = simpleDateMatch[2] ? parseInt(simpleDateMatch[2], 10) : undefined;
+          let year = simpleDateMatch[3] ? parseInt(simpleDateMatch[3], 10) : new Date().getFullYear() % 100;
+          
+          if (day !== undefined && month !== undefined) {
+            // แปลงปี 2 หลักเป็น 4 หลัก
+            if (year < 100) {
+              const currentYear = new Date().getFullYear();
+              const currentCentury = Math.floor(currentYear / 100) * 100;
+              year += currentCentury;
+              if (year > currentYear + 50) year -= 100;
+            }
+            
+            // แปลงเป็น พ.ศ.
+            if (year < 2500) {
+              year += 543;
+            }
+            
+            const dateObj = new Date(year, month - 1, day);
+            if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+              dates.push(dateObj);
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing simple date:', e);
+        }
+      }
+    }
+    
+    // ถ้ายังไม่พบวันที่เลย
     if (dates.length === 0) {
       return null;
     }
     
-    // หาวันที่ที่เก่าที่สุด (วันที่น้อยที่สุด)
-    if (dates.length === 0) return null;
+    // เรียงลำดับวันที่จากเก่าสุดไปใหม่สุด
+    dates.sort((a, b) => a.getTime() - b.getTime());
     
-    // กำหนดค่าเริ่มต้นเป็นวันที่แรกในอาร์เรย์
-    const initialDate = dates[0];
-    
-    // ใช้ reduce โดยระบุ type annotation ให้ชัดเจน
-    const earliestDate = dates.slice(1).reduce<Date>(
-      (earliest: Date, current: Date) => current < earliest ? current : earliest,
-      initialDate
-    );
+    // ใช้วันที่ล่าสุด (วันที่มากที่สุด) สำหรับการ autofill
+    const latestDate = dates[dates.length - 1];
     
     // แปลงกลับเป็นรูปแบบ YYYY/MM/DD
-    const year = earliestDate.getFullYear();
-    const month = String(earliestDate.getMonth() + 1).padStart(2, '0');
-    const day = String(earliestDate.getDate()).padStart(2, '0');
+    const formattedYear = latestDate.getFullYear();
+    const formattedMonth = String(latestDate.getMonth() + 1).padStart(2, '0');
+    const formattedDay = String(latestDate.getDate()).padStart(2, '0');
     
-    return `${year}/${month}/${day}`;
+    return `${formattedYear}/${formattedMonth}/${formattedDay}`;
   };
 
   // handle upload image
@@ -414,11 +481,7 @@ export default function EditLoadModal({
               // แปลงรูปแบบเวลาเป็นนาที
               let minutes = parseDurationToMinutes(totalDuration);
               
-              // ถ้าเป็นโปรแกรม EO ให้แปลงนาทีเป็นชั่วโมง
-              if (editForm.program === 'EO') {
-                minutes = (parseInt(minutes) / 60).toFixed(2);
-              }
-              
+              // เก็บค่าเป็นนาทีสำหรับทุกโปรแกรม รวมถึง EO
               updates.total_duration = minutes;
             }
             
@@ -822,44 +885,94 @@ export default function EditLoadModal({
     }
   };
 
-  // ถ่ายรูป
-  const captureImage = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
-      
+  // ถ่ายรูปและประมวลผล OCR
+  const captureImage = async () => {
+    if (!videoRef.current || !canvasRef.current || !currentImageIdx) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    
+    // แสดง loading ก่อนเริ่มการประมวลผล
+    Swal.fire({
+      title: 'กำลังประมวลผลภาพ...',
+      text: 'กรุณารอสักครู่',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    try {
       // ตั้งค่าขนาด canvas ให้เท่ากับวิดีโอ
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
       // วาดรูปจากวิดีโอลง canvas
-      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // แปลง canvas เป็น base64
-      const imageDataUrl = canvas.toDataURL('image/jpeg');
-      
-      // ปิดกล้อง
+      // ปิดกล้องทันทีหลังจากถ่ายรูปเสร็จ
       stopCamera();
       setShowCameraModal(false);
       
-      // ส่งรูปไปยัง handleUpload
-      if (currentImageIdx) {
-        // สร้าง File object จาก base64
-        const byteString = atob(imageDataUrl.split(',')[1]);
-        const mimeString = imageDataUrl.split(',')[0].split(':')[1].split(';')[0];
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
-        }
-        
-        const blob = new Blob([ab], { type: mimeString });
-        const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
-        
-        handleUpload(currentImageIdx, file);
+      // แปลง canvas เป็น base64 แบบ JPEG คุณภาพ 0.9 (90%)
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      
+      // ตรวจสอบขนาดของรูปภาพ
+      if (imageDataUrl.length > 5 * 1024 * 1024) { // 5MB
+        throw new Error('ขนาดรูปภาพใหญ่เกินไป กรุณาลองใหม่อีกครั้ง');
       }
+
+      // สร้าง Blob object จาก base64
+      const base64Response = await fetch(imageDataUrl);
+      const blob = await base64Response.blob();
+      
+      // สร้าง File object
+      const file = new File([blob], `camera_${Date.now()}.jpg`, { 
+        type: 'image/jpeg',
+        lastModified: Date.now()
+      });
+
+      // ตรวจสอบ MIME type
+      if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
+        throw new Error('รูปแบบไฟล์ไม่รองรับ ต้องเป็น JPG หรือ PNG เท่านั้น');
+      }
+      
+      // ตรวจสอบขนาดไฟล์
+      if (file.size > 5 * 1024 * 1024) { // 5MB
+        throw new Error('ขนาดไฟล์ใหญ่เกิน 5MB');
+      }
+
+      // อัปเดตรูปภาพใน state ก่อนทำ OCR
+      if (currentImageIdx === 1) {
+        setImage1(imageDataUrl);
+        setEditForm((prev: any) => ({ ...prev, image_url_1: imageDataUrl }));
+      } else if (currentImageIdx === 2) {
+        setImage2(imageDataUrl);
+        setEditForm((prev: any) => ({ ...prev, image_url_2: imageDataUrl }));
+      }
+      
+      // เรียกใช้ handleUpload เพื่อประมวลผล OCR
+      await handleUpload(currentImageIdx, file);
+      
+      // ปิด loading
+      Swal.close();
+      
+    } catch (error) {
+      console.error('Error capturing and processing image:', error);
+      
+      // ปิด loading และแสดงข้อความผิดพลาด
+      Swal.fire({
+        title: 'เกิดข้อผิดพลาด',
+        text: error instanceof Error ? error.message : 'ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง',
+        icon: 'error',
+        confirmButtonText: 'ตกลง'
+      });
+      
+      // รีเซ็ตสถานะกล้อง
+      stopCamera();
+      setShowCameraModal(false);
     }
   };
 
@@ -1138,9 +1251,21 @@ export default function EditLoadModal({
                       }}
                       placeholder="From sterile slip"
                     />
-                    
+                    <span className="text-black">นาที</span>
                   </span>
                 </label>
+                {/* หมายเหตุ */}
+                <div className="w-full mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ</label>
+                  <textarea
+                    name="notes"
+                    className="w-full border rounded px-2 py-1 text-black"
+                    rows={2}
+                    value={editForm?.notes || ''}
+                    onChange={handleChange}
+                    placeholder="บันทึกหมายเหตุเพิ่มเติม"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1193,24 +1318,37 @@ export default function EditLoadModal({
                 <button 
                   type="button" 
                   className="mt-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded"
-                  onClick={e => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    setImage1("");
-                    setEditForm((prev: any) => ({ 
-                      ...prev, 
-                      image_url_1: "",
-                      // Clear autofilled data from sterile slip
-                      sterilizer_number: "",
-                      cycle_number: "",
-                      total_duration: ""
-                    }));
-                    Swal.fire({
-                      title: 'ลบรูปภาพ',
-                      text: 'ลบรูปภาพ Sterile Slip เรียบร้อย',
-                      icon: 'success',
-                      timer: 2000,
-                      showConfirmButton: false
+                    const { isConfirmed } = await Swal.fire({
+                      title: 'ยืนยันการลบ',
+                      text: 'คุณแน่ใจหรือไม่ที่ต้องการลบรูปภาพ Sterile Slip นี้?',
+                      icon: 'warning',
+                      showCancelButton: true,
+                      confirmButtonColor: '#3085d6',
+                      cancelButtonColor: '#d33',
+                      confirmButtonText: 'ใช่, ลบเลย',
+                      cancelButtonText: 'ยกเลิก'
                     });
+
+                    if (isConfirmed) {
+                      setImage1("");
+                      setEditForm((prev: any) => ({ 
+                        ...prev, 
+                        image_url_1: "",
+                        // Clear autofilled data from sterile slip
+                        sterilizer_number: "",
+                        cycle_number: "",
+                        total_duration: ""
+                      }));
+                      Swal.fire({
+                        title: 'ลบรูปภาพ',
+                        text: 'ลบรูปภาพ Sterile Slip เรียบร้อย',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                      });
+                    }
                   }}
                 >
                   ลบรูป
@@ -1234,26 +1372,39 @@ export default function EditLoadModal({
                 <button 
                   type="button" 
                   className="mt-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded"
-                  onClick={e => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    setImage2("");
-                    setEditForm((prev: any) => ({ 
-                      ...prev, 
-                      image_url_2: "",
-                      // Clear autofilled data from attest
-                      attest_sn: "",
-                      attest_time: "",
-                      bio_test: ""
-                    }));
-                    setAttestSN("");
-                    setAttestTime("");
-                    Swal.fire({
-                      title: 'ลบรูปภาพ',
-                      text: 'ลบรูปภาพ Attest เรียบร้อย',
-                      icon: 'success',
-                      timer: 2000,
-                      showConfirmButton: false
+                    const { isConfirmed } = await Swal.fire({
+                      title: 'ยืนยันการลบ',
+                      text: 'คุณแน่ใจหรือไม่ที่ต้องการลบรูปภาพ Attest นี้?',
+                      icon: 'warning',
+                      showCancelButton: true,
+                      confirmButtonColor: '#3085d6',
+                      cancelButtonColor: '#d33',
+                      confirmButtonText: 'ใช่, ลบเลย',
+                      cancelButtonText: 'ยกเลิก'
                     });
+
+                    if (isConfirmed) {
+                      setImage2("");
+                      setEditForm((prev: any) => ({ 
+                        ...prev, 
+                        image_url_2: "",
+                        // Clear autofilled data from attest
+                        attest_sn: "",
+                        attest_time: "",
+                        bio_test: ""
+                      }));
+                      setAttestSN("");
+                      setAttestTime("");
+                      Swal.fire({
+                        title: 'ลบรูปภาพ',
+                        text: 'ลบรูปภาพ Attest เรียบร้อย',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                      });
+                    }
                   }}
                 >
                   ลบรูป
