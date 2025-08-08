@@ -4,6 +4,37 @@ import { saveAs } from 'file-saver';
 import { getFirestore, collection, query, orderBy, onSnapshot, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import EditLoadModal from './EditLoadModal';
 
+// Helper function to determine statuses
+const getStatuses = (load: any) => {
+  // Check if it's a test run (no items or all quantities are 0/empty)
+  const isTestRun = !load.items || 
+                   load.items.length === 0 || 
+                   load.items.every((item: any) => !item.quantity || item.quantity === '0' || item.quantity === 0);
+  
+  // Check for any failed tests
+  const hasFailed = 
+    load.mechanical === 'ไม่ผ่าน' || 
+    load.chemical_external === 'ไม่ผ่าน' || 
+    load.chemical_internal === 'ไม่ผ่าน' || 
+    load.bio_test === 'ไม่ผ่าน';
+  
+  // Return statuses based on conditions
+  if (isTestRun) {
+    const testResultStatus = hasFailed 
+      ? { status: 'Fail', color: 'bg-red-500' }
+      : { status: 'Pass', color: 'bg-green-500' };
+      
+    return [
+      { status: 'Test Run', color: 'bg-yellow-500' },
+      testResultStatus
+    ];
+  } else if (hasFailed) {
+    return [{ status: 'Fail', color: 'bg-red-500' }];
+  } else {
+    return [{ status: 'Pass', color: 'bg-green-500' }];
+  }
+};
+
 interface SterilizerLoadsCardViewProps {
   user: any;
   clearAllFiltersTrigger?: number;
@@ -455,7 +486,24 @@ export default function SterilizerLoadsCardView({
               <div className="font-bold text-lg text-blue-700">
                 {load.date || "-"} | {load.sterilizer || "-"}
               </div>
-              <div className="text-base font-bold text-black">{load.program || "-"}</div>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const statuses = getStatuses(load);
+                  return (
+                    <>
+                      {statuses.map((status, index) => (
+                        <span 
+                          key={index}
+                          className={`${status.color} text-white text-xs px-2 py-0.5 rounded-full font-semibold`}
+                        >
+                          {status.status}
+                        </span>
+                      ))}
+                    </>
+                  );
+                })()}
+                <span className="text-base font-bold text-black">{load.program || "-"}</span>
+              </div>
             </div>
             {/* SN, เวลา, Duration Display - Black row below */}
             {(load.attest_sn || load.attest_time || load.total_duration) && (

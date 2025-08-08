@@ -81,20 +81,25 @@ export default function HistoryFormModal({
       console.error('Error submitting form:', error);
     }
   };
-  // Auto-fill staff fields with saved values or user's display name/email
+  // Auto-fill staff and reader from user info whenever the modal is shown
   useEffect(() => {
-    if (user) {
-      const savedStaff = localStorage.getItem('sterile_staff');
-      const savedReader = localStorage.getItem('result_reader');
+    if (show && user) {
       const userName = user.displayName || user.email || '';
       
       setForm(prev => ({
         ...prev,
-        sterile_staff: prev.sterile_staff || savedStaff || userName,
-        result_reader: prev.result_reader || savedReader || userName
+        sterile_staff: userName,
+        result_reader: userName,
+        // Keep existing values for other fields
+        ...(prev.sterilizer === undefined && { sterilizer: '' }),
+        ...(prev.mechanical === undefined && { mechanical: '' }),
+        ...(prev.chemical_external === undefined && { chemical_external: '' }),
+        ...(prev.chemical_internal === undefined && { chemical_internal: '' }),
+        ...(prev.bio_test === undefined && { bio_test: '' }),
+        ...(prev.items === undefined && { items: [] })
       }));
     }
-  }, [user, setForm]);
+  }, [show, user]); // Run when modal is shown or user changes
 
   // Save staff and reader to localStorage when they change
   useEffect(() => {
@@ -175,8 +180,8 @@ export default function HistoryFormModal({
           <div className="flex flex-col md:flex-row gap-6">
             {/* ฝั่งซ้าย: ข้อมูลรอบ/checkbox */}
             <div className="flex-1 min-w-[260px] flex flex-col gap-2">
-              <label className="font-bold text-black">รอบการฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full text-black" value={form.sterilizer || ''} onChange={handleChange} required /></label>
-              <div className="font-bold text-black flex items-center gap-2">โปรแกรมที่ใช้
+              <label className="font-medium text-gray-600">รอบการฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full bg-gray-100 text-gray-500" value={form.sterilizer || ''} readOnly /></label>
+              <div className="font-medium text-gray-600 flex items-center gap-2">โปรแกรมที่ใช้
                 <select name="program" className="border rounded px-2 py-1 ml-2 text-black" value={form.program || ''} onChange={handleChange}>
                   <option value="">เลือกโปรแกรม</option>
                   <option value="PREVAC">PREVAC</option>
@@ -195,31 +200,31 @@ export default function HistoryFormModal({
                   <div className="text-black">• D20: {form?.d20 ? '✓' : '✗'}</div>
                 </div>
               )}
-              <div className="font-bold mt-2 text-black">ผลการตรวจสอบประสิทธิภาพการทำลายเชื้อ</div>
-              <div className="ml-2 text-black">กลไก:
-                <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ผ่าน" checked={form.mechanical === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-                <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ไม่ผ่าน" checked={form.mechanical === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <div className="font-medium mt-2 text-gray-400">ผลการตรวจสอบประสิทธิภาพการทำลายเชื้อ (ปิดใช้งาน)</div>
+              <div className="ml-2 text-gray-400">กลไก:
+                <label className="ml-2 text-gray-400"><input type="radio" name="mechanical" value="ผ่าน" checked={form.mechanical === 'ผ่าน'} disabled /> ผ่าน</label>
+                <label className="ml-2 text-gray-400"><input type="radio" name="mechanical" value="ไม่ผ่าน" checked={form.mechanical === 'ไม่ผ่าน'} disabled /> ไม่ผ่าน</label>
               </div>
-              <div className="ml-2 text-black">เทปเคมีภายนอก:
-                <label className="ml-2 text-black"><input type="radio" name="chemical_external" value="ผ่าน" checked={form.chemical_external === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-                <label className="ml-2 text-black"><input type="radio" name="chemical_external" value="ไม่ผ่าน" checked={form.chemical_external === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <div className="ml-2 text-gray-400">เทปเคมีภายนอก:
+                <label className="ml-2 text-gray-400"><input type="radio" name="chemical_external" value="ผ่าน" checked={form.chemical_external === 'ผ่าน'} disabled /> ผ่าน</label>
+                <label className="ml-2 text-gray-400"><input type="radio" name="chemical_external" value="ไม่ผ่าน" checked={form.chemical_external === 'ไม่ผ่าน'} disabled /> ไม่ผ่าน</label>
               </div>
-              <div className="ml-2 text-black">เทปเคมีภายใน:
-                <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ผ่าน" checked={form.chemical_internal === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-                <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ไม่ผ่าน" checked={form.chemical_internal === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <div className="ml-2 text-gray-400">เทปเคมีภายใน:
+                <label className="ml-2 text-gray-400"><input type="radio" name="chemical_internal" value="ผ่าน" checked={form.chemical_internal === 'ผ่าน'} disabled /> ผ่าน</label>
+                <label className="ml-2 text-gray-400"><input type="radio" name="chemical_internal" value="ไม่ผ่าน" checked={form.chemical_internal === 'ไม่ผ่าน'} disabled /> ไม่ผ่าน</label>
               </div>
 
-              <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ (เฉพาะรอบที่ใช้ทดสอบ)</div>
-              <div className="ml-2 text-black">ผล:
-                <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ผ่าน" checked={form.bio_test === 'ผ่าน'} onChange={handleChange} /> ผ่าน</label>
-                <label className="ml-2 text-black"><input type="radio" name="bio_test" value="ไม่ผ่าน" checked={form.bio_test === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <div className="font-medium mt-2 text-gray-400">ตัวเชื้อทดสอบชีวภาพ (ปิดใช้งาน)</div>
+              <div className="ml-2 text-gray-400">ผล:
+                <label className="ml-2 text-gray-400"><input type="radio" name="bio_test" value="ผ่าน" checked={form.bio_test === 'ผ่าน'} disabled /> ผ่าน</label>
+                <label className="ml-2 text-gray-400"><input type="radio" name="bio_test" value="ไม่ผ่าน" checked={form.bio_test === 'ไม่ผ่าน'} disabled /> ไม่ผ่าน</label>
               </div>
-              <label className="font-bold mt-2 text-black">เจ้าหน้าที่ Sterile <input name="sterile_staff" type="text" className="border rounded px-2 py-1 w-full text-black" value={form.sterile_staff || ''} onChange={handleChange} /></label>
-              <label className="font-bold text-black">ผู้อ่านผล <input name="result_reader" type="text" className="border rounded px-2 py-1 w-full text-black" value={form.result_reader || ''} onChange={handleChange} /></label>
+              <label className="font-medium mt-2 text-gray-600">เจ้าหน้าที่ Sterile <input name="sterile_staff" type="text" className="border rounded px-2 py-1 w-full bg-gray-100 text-gray-700" value={form.sterile_staff || ''} readOnly /></label>
+              <label className="font-medium text-gray-600">ผู้อ่านผล <input name="result_reader" type="text" className="border rounded px-2 py-1 w-full bg-gray-100 text-gray-700" value={form.result_reader || ''} readOnly /></label>
             </div>
             {/* ฝั่งขวา: ตารางอุปกรณ์ */}
             <div className="flex-[2] min-w-[320px]">
-              <div className="font-bold text-center mb-2 text-black">รายละเอียดอุปกรณ์ที่นำเข้าอบ</div>
+              <div className="font-medium text-center mb-2 text-gray-600">รายละเอียดอุปกรณ์ที่นำเข้าอบ</div>
               <table className="w-full border text-xs text-black">
                 <thead>
                   <tr className="bg-gray-100 text-black">

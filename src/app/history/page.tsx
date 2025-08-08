@@ -829,9 +829,19 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-500 p-4">
-      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-8 p-8 flex flex-col items-center border border-white/30 backdrop-blur-xl">
-        <div className="w-full flex flex-col sm:flex-row gap-4 items-center justify-between mb-6">
-          <h1 className="text-2xl font-extrabold text-purple-700 text-center drop-shadow">ประวัติการบันทึก Sterilizer</h1>
+      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl">
+        <div className="w-full flex flex-col sm:flex-row gap-3 items-center justify-between mb-3">
+          <div className="flex items-center gap-4">
+            <img 
+              src="/ram-logo.jpg" 
+              alt="RAM Hospital" 
+              className="w-33 h-22 object-contain"
+            />
+            <h1 className="text-2xl font-extrabold text-center drop-shadow">
+              <span className="text-sky-400">ประวัติการบันทึก</span>{' '}
+              <span className="text-blue-700">Sterilizer</span>
+            </h1>
+          </div>
           <div className="flex items-center gap-4 flex-wrap">
   <button
     className="flex items-center bg-sky-500 hover:bg-sky-700 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[180px] justify-center"
@@ -852,20 +862,17 @@ export default function HistoryPage() {
 </div>
         </div>
         {user && (
-          <div className="w-full mb-4 flex justify-end">
-            <div className="bg-purple-100 text-purple-700 rounded-full px-6 py-2 font-semibold shadow text-center">
+          <div className="w-full mb-2 flex justify-end">
+            <div className="bg-purple-100 text-purple-700 rounded-full px-4 py-1 text-sm font-semibold shadow text-center">
               👤 {user.displayName || user.email}
             </div>
           </div>
         )}
         
-        {/* Tab Navigation */}
-        {/* ลบ JSX ปุ่ม tab navigation (ข้อมูลที่กรอกเอง/ข้อมูลจาก OCR) ออกทั้งหมด */}
-        
-        <div className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+        <div className="w-full mt-1">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">วันที่เริ่มต้น</label>
               <div className="flex space-x-2 items-center">
                 <div className="w-28">
                   <input
@@ -925,7 +932,7 @@ export default function HistoryPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">วันที่สิ้นสุด</label>
               <div className="flex space-x-2 items-center">
                 <div className="w-28">
                   <input
@@ -966,7 +973,7 @@ export default function HistoryPage() {
             <div className="flex items-end">
               <button
                 onClick={handleClearAllFilters}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded shadow text-sm h-[42px] whitespace-nowrap w-full"
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-1.5 rounded shadow text-sm h-[38px] whitespace-nowrap w-full"
                 type="button"
               >
                 ล้างตัวกรองทั้งหมด
