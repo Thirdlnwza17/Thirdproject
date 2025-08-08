@@ -479,7 +479,7 @@ export default function EditLoadModal({
             
             if (totalDuration) {
               // แปลงรูปแบบเวลาเป็นนาที
-              let minutes = parseDurationToMinutes(totalDuration);
+              const minutes = parseDurationToMinutes(totalDuration);
               
               // เก็บค่าเป็นนาทีสำหรับทุกโปรแกรม รวมถึง EO
               updates.total_duration = minutes;
