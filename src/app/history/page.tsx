@@ -99,6 +99,51 @@ export default function HistoryPage() {
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   };
 
+  // Set date range based on filter type (today, week, month, year)
+  const setDateRangeFilter = (type: 'today' | 'week' | 'month' | 'year') => {
+    const today = new Date();
+    const startDate = new Date();
+    
+    switch (type) {
+      case 'today':
+        // Set to today
+        break;
+      case 'week':
+        // Set to start of week (Sunday)
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 0); // Adjust for Sunday
+        startDate.setDate(diff);
+        break;
+      case 'month':
+        // Set to first day of month
+        startDate.setDate(1);
+        break;
+      case 'year':
+        // Set to first day of year
+        startDate.setMonth(0, 1);
+        break;
+    }
+
+    // Format dates
+    const formatDatePart = (date: Date) => ({
+      year: date.getFullYear().toString(),
+      month: (date.getMonth() + 1).toString().padStart(2, '0'),
+      day: date.getDate().toString().padStart(2, '0')
+    });
+
+    const start = formatDatePart(startDate);
+    const end = formatDatePart(today);
+
+    setDateRange({
+      startYear: start.year,
+      startMonth: start.month,
+      startDay: start.day,
+      endYear: end.year,
+      endMonth: end.month,
+      endDay: end.day
+    });
+  };
+
   const handleDatePartChange = (field: keyof typeof dateRange, value: string, maxLength?: number) => {
     // Filter input if maxLength is provided
     const filteredValue = maxLength ? filterNumericInput(value, maxLength) : value;
@@ -889,63 +934,88 @@ export default function HistoryPage() {
         )}
         
         <div className="w-full mt-1">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+          {/* Quick Date Filters */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setDateRangeFilter('today')}
+                className="px-3 py-1 text-xs sm:text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full transition-colors"
+              >
+                วันนี้
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateRangeFilter('week')}
+                className="px-3 py-1 text-xs sm:text-sm bg-green-100 hover:bg-green-200 text-green-800 rounded-full transition-colors"
+              >
+                สัปดาห์นี้
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateRangeFilter('month')}
+                className="px-3 py-1 text-xs sm:text-sm bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full transition-colors"
+              >
+                เดือนนี้
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateRangeFilter('year')}
+                className="px-3 py-1 text-xs sm:text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-full transition-colors"
+              >
+                ปีนี้
+              </button>
+            </div>
+          </div>
+
+          {/* Date Range Selectors */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-0.5">วันที่เริ่มต้น</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">จากวันที่</label>
               <div className="flex space-x-2 items-center">
-                <div className="w-28">
-                  <input
-                    type="text"
-                    list="years"
+                <div className="w-24">
+                  <select
                     value={dateRange.startYear}
                     onChange={(e) => handleDatePartChange('startYear', e.target.value, 4)}
-                    placeholder="ปี"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
-                  />
-                  <datalist id="years">
+                  >
+                    <option value="">ปี</option>
                     {years.map(year => (
                       <option key={`start-year-${year}`} value={year}>
                         {year}
                       </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
-                <span>/</span>
                 <div className="w-20">
-                  <input
-                    type="text"
-                    list="months"
+                  <select
                     value={dateRange.startMonth}
                     onChange={(e) => handleDatePartChange('startMonth', e.target.value, 2)}
-                    placeholder="เดือน"
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
-                  />
-                  <datalist id="months">
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
+                    disabled={!dateRange.startYear}
+                  >
+                    <option value="">เดือน</option>
                     {months.map(month => (
                       <option key={`start-month-${month}`} value={month}>
                         {month}
                       </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
-                <span>/</span>
                 <div className="w-20">
-                  <input
-                    type="text"
-                    list={`days-${dateRange.startYear}-${dateRange.startMonth}`}
+                  <select
                     value={dateRange.startDay}
                     onChange={(e) => handleDatePartChange('startDay', e.target.value, 2)}
-                    disabled={!dateRange.startYear || !dateRange.startMonth}
-                    placeholder="วัน"
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border disabled:bg-gray-100"
-                  />
-                  <datalist id={`days-${dateRange.startYear}-${dateRange.startMonth}`}>
-                    {startDays.map((day: string) => (
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
+                    disabled={!dateRange.startMonth}
+                  >
+                    <option value="">วัน</option>
+                    {startDays.map(day => (
                       <option key={`start-day-${day}`} value={day}>
                         {day}
                       </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
               </div>
             </div>
@@ -954,37 +1024,50 @@ export default function HistoryPage() {
               <label className="block text-xs font-medium text-gray-700 mb-0.5">วันที่สิ้นสุด</label>
               <div className="flex space-x-2 items-center">
                 <div className="w-28">
-                  <input
-                    type="text"
-                    list="years"
+                  <select
                     value={dateRange.endYear}
                     onChange={(e) => handleDatePartChange('endYear', e.target.value, 4)}
-                    placeholder="ปี"
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
-                  />
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
+                  >
+                    <option value="">ปี</option>
+                    {years.map(year => (
+                      <option key={`end-year-${year}`} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <span>/</span>
                 <div className="w-20">
-                  <input
-                    type="text"
-                    list="months"
+                  <select
                     value={dateRange.endMonth}
                     onChange={(e) => handleDatePartChange('endMonth', e.target.value, 2)}
-                    placeholder="เดือน"
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
-                  />
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
+                    disabled={!dateRange.endYear}
+                  >
+                    <option value="">เดือน</option>
+                    {months.map(month => (
+                      <option key={`end-month-${month}`} value={month}>
+                        {month}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <span>/</span>
                 <div className="w-20">
-                  <input
-                    type="text"
-                    list={`days-${dateRange.endYear}-${dateRange.endMonth}`}
+                  <select
                     value={dateRange.endDay}
                     onChange={(e) => handleDatePartChange('endDay', e.target.value, 2)}
-                    disabled={!dateRange.endYear || !dateRange.endMonth}
-                    placeholder="วัน"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border disabled:bg-gray-100"
-                  />
+                    disabled={!dateRange.endYear || !dateRange.endMonth}
+                  >
+                    <option value="">วัน</option>
+                    {endDays.map(day => (
+                      <option key={`end-day-${day}`} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

@@ -74,6 +74,10 @@ export default function SterilizerLoadsCardView({
   const [snFilter, setSnFilter] = useState('');
   // State สำหรับ search
   const [searchText, setSearchText] = useState("");
+  
+  // State สำหรับ staff filter
+  const [staffList, setStaffList] = useState<{id: string, fullName: string}[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState("");
 
   // State สำหรับ modal image, zoom, drag
   const [showBigImage1, setShowBigImage1] = useState(false);
@@ -92,6 +96,32 @@ export default function SterilizerLoadsCardView({
   const overlayRef2 = useRef<HTMLDivElement>(null);
   const lastTapBig1 = useRef(0);
   const lastTapBig2 = useRef(0);
+
+  // Fetch staff list from Firestore
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const db = getFirestore();
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const users = usersSnapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            fullName: doc.data().fullName || doc.data().email || 'Unknown'
+          }))
+          .filter(user => user.fullName && user.fullName !== 'Unknown');
+        
+        // Remove duplicates and sort alphabetically
+        const uniqueUsers = Array.from(new Map(users.map(user => [user.fullName, user])).values())
+          .sort((a, b) => a.fullName.localeCompare(b.fullName));
+        
+        setStaffList(uniqueUsers);
+      } catch (error) {
+        console.error('Error fetching staff list:', error);
+      }
+    };
+
+    fetchStaff();
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -146,6 +176,7 @@ export default function SterilizerLoadsCardView({
     setFilter('All');
     setAutoclaveSub('All');
     setSnFilter('');
+    setSelectedStaff('');
     setMechanicalFilter('');
     setChemicalExternalFilter('');
     setChemicalInternalFilter('');
@@ -153,6 +184,17 @@ export default function SterilizerLoadsCardView({
     setSearchText('');
     setCurrentPage(1);
   }, [clearAllFiltersTrigger]);
+  
+  // Filter loads by staff (both sterile staff and result readers)
+  const filterByStaff = (load: any) => {
+    if (!selectedStaff) return true;
+    
+    const staffName = selectedStaff.toLowerCase();
+    const sterileStaff = (load.sterile_staff || '').toLowerCase();
+    const resultReader = (load.result_reader || '').toLowerCase();
+    
+    return sterileStaff.includes(staffName) || resultReader.includes(staffName);
+  };
 
   // ฟังก์ชัน filter, pagination
   const filteredLoads = loads.filter(load => {
@@ -197,6 +239,9 @@ export default function SterilizerLoadsCardView({
     if (chemicalExternalFilter && (load.chemical_external || '').toLowerCase() !== chemicalExternalFilter) return false;
     if (chemicalInternalFilter && (load.chemical_internal || '').toLowerCase() !== chemicalInternalFilter) return false;
     if (bioTestFilter && (load.bio_test || '').toLowerCase() !== bioTestFilter) return false;
+    
+    // Staff filter
+    if (!filterByStaff(load)) return false;
 
     // Search only: operator, items, sterilizer
     if (searchText && searchText.trim()) {
@@ -356,17 +401,36 @@ export default function SterilizerLoadsCardView({
     <>
       {/* Filter dropdown */}
       <div className="flex flex-wrap items-center gap-4 mb-4">
+        {/* Staff Filter */}
+        <div className="flex items-center">
+          <label className="font-bold text-gray-700 whitespace-nowrap mr-2">เจ้าหน้าที่:</label>
+          <select
+            className="border rounded px-2 py-1 text-black bg-white min-w-[180px]"
+            value={selectedStaff}
+            onChange={e => { setSelectedStaff(e.target.value); setCurrentPage(1); }}
+          >
+            <option value="">ทั้งหมด</option>
+            {staffList.map((staff) => (
+              <option key={staff.id} value={staff.fullName}>
+                {staff.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
+        
         {/* SN Filter */}
-        <label className="font-bold text-gray-700">SN:</label>
-        <select
-          className="border rounded px-2 py-1 text-black bg-white"
-          value={snFilter}
-          onChange={e => { setSnFilter(e.target.value); setCurrentPage(1); }}
-        >
+        <div className="flex items-center">
+          <label className="font-bold text-gray-700 whitespace-nowrap mr-2">SN:</label>
+          <select
+            className="border rounded px-2 py-1 text-black bg-white"
+            value={snFilter}
+            onChange={e => { setSnFilter(e.target.value); setCurrentPage(1); }}
+          >
           <option value="">ทั้งหมด</option>
           <option value="431930">431930</option>
           <option value="101715">101715</option>
         </select>
+        </div>
         <input
           className="border rounded px-2 py-1 text-black bg-white w-60 order-first"
           type="text"

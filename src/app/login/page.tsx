@@ -1,37 +1,75 @@
 'use client';
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
-import { getFirestore, setDoc, doc, getDoc, Timestamp } from "firebase/firestore";
+import { getFirestore, setDoc, doc, getDoc, Timestamp, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+
+interface UserData {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [selectedUser, setSelectedUser] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const db = getFirestore();
+        const usersRef = collection(db, "users");
+        const querySnapshot = await getDocs(usersRef);
+        const usersList = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          email: doc.data().email,
+          fullName: doc.data().fullName || doc.data().displayName || 'No Name',
+          role: doc.data().role || 'operator'
+        }));
+        setUsers(usersList);
+      } catch (err) {
+        console.error("Error fetching users:", err);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    
+    if (!selectedUser) {
+      setError("กรุณาเลือกผู้ใช้");
+      return;
+    }
+    
     setLoading(true);
     try {
+      const selectedUserData = users.find(user => user.id === selectedUser);
+      if (!selectedUserData) {
+        throw new Error("ไม่พบข้อมูลผู้ใช้ที่เลือก");
+      }
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
       // Update the user's display name in Firebase Auth
-      if (fullName.trim()) {
-        await updateProfile(user, {
-          displayName: fullName.trim()
-        });
-      }
+      await updateProfile(user, {
+        displayName: selectedUserData.fullName.trim()
+      });
 
       // Save user info to Firestore
       const db = getFirestore();
@@ -46,7 +84,7 @@ export default function LoginPage() {
 
       await setDoc(userRef, {
         email: user.email,
-        fullName: fullName.trim() || null,
+        fullName: selectedUserData.fullName.trim(),
         lastLogin: Timestamp.now(),
         role,
       }, { merge: true });
@@ -93,15 +131,20 @@ export default function LoginPage() {
         <form className="w-full space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-1">
             <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">ชื่อ-นามสกุล</label>
-            <input
+            <select
               id="fullName"
-              type="text"
-              placeholder="กรุณากรอกชื่อ-นามสกุล"
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-base text-gray-800 placeholder-gray-400 transition-all duration-200"
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white"
               required
-            />
+            >
+              <option value="">-- กรุณาเลือกชื่อผู้ใช้ --</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.fullName} ({user.email})
+                </option>
+              ))}
+            </select>
           </div>
           
           <div className="space-y-1">

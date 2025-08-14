@@ -3,6 +3,22 @@ import React, { useRef, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
 import { User } from 'firebase/auth';
+import { collection, getDocs, getFirestore } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+
+// Initialize Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyC7jADGWqwgFSMvJGWoDEwPA-GOHlCE22w",
+  authDomain: "sterilie-23a8a.firebaseapp.com",
+  projectId: "sterilie-23a8a",
+  storageBucket: "sterilie-23a8a.firebasestorage.app",
+  messagingSenderId: "544281812264",
+  appId: "1:544281812264:web:9179294cca6908f8d5441d",
+  measurementId: "G-5QD8XV01XR"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 type ImageSourceType = 'camera' | 'file' | null;
 
@@ -48,6 +64,7 @@ export default function EditLoadModal({
   // เพิ่ม state สำหรับ zoom modal
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [users, setUsers] = useState<Array<{id: string, fullName: string, email: string}>>([]);
   const handleDoubleClick = () => {
     setZoomLevel(z => z === 1 ? 2 : 1);
   };
@@ -183,20 +200,36 @@ export default function EditLoadModal({
 
   // ฟังก์ชันดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
   const extractSterilizerInfo = (text: string): string => {
-    // รูปแบบที่รองรับ:
+    // 1. ตรวจสอบ LOAD CODE หรือ LOCO CODE สำหรับ PREVAC
+    const loadCodeMatch = text.match(/(?:LOAD|LOCO)\s*CODE[\s:]*([A-Za-z0-9-]+)/i);
+    if (loadCodeMatch && loadCodeMatch[1]) {
+      // ตรวจสอบว่ามีตัวเลขใน LOAD CODE หรือไม่
+      const numberMatch = loadCodeMatch[1].match(/\d+/);
+      if (numberMatch) {
+        return numberMatch[0]; // ส่งคืนเฉพาะตัวเลข
+      }
+      return loadCodeMatch[1].trim();
+    }
+
+    // 2. รูปแบบอื่นๆ ที่รองรับ:
     // - Total cycle no: 12345
     // - cycle NR: 12345
     // - Model: XXXXX-12345
     // - number of cycle: 12345
     const patterns = [
-      /(?:Total cycle no|cycle NR|number of cycle)[:\s]*([A-Za-z0-9-]+)/i,
-      /Model[:\s]*([A-Za-z0-9-]+)/i,
-      /(?:cycle|no|nr|#)[:\s]*(\d+)/i
+      /(?:Total cycle no|cycle NR|number of cycle)[\s:]*([A-Za-z0-9-]+)/i,
+      /Model[\s:]*([A-Za-z0-9-]+)/i,
+      /(?:cycle|no|nr|#)[\s:]*(\d+)/i
     ];
     
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
+        // ตรวจสอบว่ามีตัวเลขในผลลัพธ์หรือไม่
+        const numberMatch = match[1].match(/\d+/);
+        if (numberMatch) {
+          return numberMatch[0]; // ส่งคืนเฉพาะตัวเลข
+        }
         return match[1].trim();
       }
     }
@@ -497,9 +530,17 @@ export default function EditLoadModal({
               updates.total_duration = minutes;
             }
             
+            // Auto-check test results when a sterile slip image is uploaded
+            const testResultsUpdate = {
+              mechanical: 'ผ่าน',
+              chemical_external: 'ผ่าน',
+              chemical_internal: 'ผ่าน'
+            };
+            
             setEditForm((prev: any) => ({
               ...prev,
-              ...updates
+              ...updates,
+              ...testResultsUpdate
             }));
             
             // สร้างข้อความแจ้งเตือน
@@ -522,6 +563,12 @@ export default function EditLoadModal({
                 messageParts.push(`เวลารวม: ${totalDuration} นาที`);
               }
             }
+            
+            // แจ้งเตือนการติ๊กผ่านผลการทดสอบอัตโนมัติ
+            messageParts.push('<div class="mt-2"><b>ตั้งค่าผลการทดสอบเป็น "ผ่าน" ให้แล้วสำหรับ:</b>');
+            messageParts.push('- การทดสอบกลไก (Mechanical)');
+            messageParts.push('- เทปเคมีภายนอก (Chemical External)');
+            messageParts.push('- เทปเคมีภายใน (Chemical Internal)</div>');
             
             // แสดงการแจ้งเตือนข้อความเดียวที่รวมทุกข้อมูล
             if (messageParts.length > 0) {
@@ -1024,6 +1071,42 @@ export default function EditLoadModal({
     };
   }, [stream]);
 
+  // ดึงข้อมูลผู้ใช้จาก Firestore
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const usersCollection = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersCollection);
+        const usersList = usersSnapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            fullName: doc.data().fullName || doc.data().email || 'Unknown User',
+            email: doc.data().email || ''
+          }))
+          .filter(user => user.fullName !== 'Unknown User')
+          .sort((a, b) => a.fullName.localeCompare(b.fullName));
+        
+        setUsers(usersList);
+        
+        // ตั้งค่าผู้ใช้ปัจจุบันเป็นค่าเริ่มต้นถ้ายังไม่ได้ตั้งค่า
+        if (user) {
+          const currentUser = usersList.find(u => u.email === user.email);
+          if (currentUser) {
+            setEditForm((prev: any) => ({
+              ...prev,
+              sterile_staff: prev.sterile_staff || currentUser.fullName,
+              result_reader: prev.result_reader || currentUser.fullName
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
+    
+    fetchUsers();
+  }, [user]);
+
   // Modal เลือกแหล่งที่มาของรูป
   const ImageSourceModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1186,8 +1269,36 @@ export default function EditLoadModal({
                 <p className="text-sm text-gray-500 mt-1">กรุณาอัปโหลดรูป Attest เพื่อเปิดใช้งานการบันทึกผล BI</p>
               )}
             </div>
-            <label className="font-bold mt-2 text-black">เจ้าหน้าที่ Sterile <input name="sterile_staff" type="text" className="border rounded px-2 py-1 w-full text-black" value={editForm?.sterile_staff || ''} onChange={handleChange} /></label>
-            <label className="font-bold text-black">ผู้อ่านผล <input name="result_reader" type="text" className="border rounded px-2 py-1 w-full text-black" value={editForm?.result_reader || ''} onChange={handleChange} /></label>
+            <div className="font-bold mt-2 text-black">
+              <div>เจ้าหน้าที่ Sterile</div>
+              <select 
+                name="sterile_staff" 
+                className="border rounded px-2 py-1 w-full text-black mt-1"
+                value={editForm?.sterile_staff || ''} 
+                onChange={handleChange}
+              >
+                {users.map((user) => (
+                  <option key={user.id} value={user.fullName}>
+                    {user.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="font-bold text-black mt-2">
+              <div>ผู้อ่านผล</div>
+              <select 
+                name="result_reader" 
+                className="border rounded px-2 py-1 w-full text-black mt-1"
+                value={editForm?.result_reader || ''} 
+                onChange={handleChange}
+              >
+                {users.map((user) => (
+                  <option key={user.id} value={user.fullName}>
+                    {user.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* ตารางชุดอุปกรณ์ */}
             <div className="mt-4">
