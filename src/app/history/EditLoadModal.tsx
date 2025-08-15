@@ -46,17 +46,21 @@ export default function EditLoadModal({
     // refs สำหรับ input file และ video
   const slipInputRef = useRef<HTMLInputElement>(null);
   const attestInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const slipGalleryRef = useRef<HTMLInputElement>(null);
+  const attestGalleryRef = useRef<HTMLInputElement>(null);
+  // removed video/canvas refs - use native file input capture instead
   
   // State สำหรับรูป
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
   const [image2, setImage2] = useState(editForm.image_url_2 || "");
   
-  // State สำหรับจัดการ modal และกล้อง
-  const [showCameraModal, setShowCameraModal] = useState(false);
+  // State สำหรับจัดการรูปภาพที่กำลังแก้ไข (1=sterile slip, 2=attest)
   const [currentImageIdx, setCurrentImageIdx] = useState<1 | 2 | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [showPickerModal, setShowPickerModal] = useState(false);
+  const [showWebcamModal, setShowWebcamModal] = useState(false);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // State สำหรับวันที่
   const [date, setDate] = useState(editForm.date || "");
@@ -925,151 +929,53 @@ export default function EditLoadModal({
     }
   };
 
-  // เริ่มต้นกล้อง
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      Swal.fire('ผิดพลาด', 'ไม่สามารถเข้าถึงกล้องได้', 'error');
-    }
-  };
+  // Removed stream-based capture; use native file input capture and existing handleUpload
 
-  // หยุดกล้อง
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  };
-
-  // ถ่ายรูปและประมวลผล OCR
-  const captureImage = async () => {
-    if (!videoRef.current || !canvasRef.current || !currentImageIdx) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    
-    // แสดง loading ก่อนเริ่มการประมวลผล
-    Swal.fire({
-      title: 'กำลังประมวลผลภาพ...',
-      text: 'กรุณารอสักครู่',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
-
-    try {
-      // ตั้งค่าขนาด canvas ให้เท่ากับวิดีโอ
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // วาดรูปจากวิดีโอลง canvas
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // ปิดกล้องทันทีหลังจากถ่ายรูปเสร็จ
-      stopCamera();
-      setShowCameraModal(false);
-      
-      // แปลง canvas เป็น base64 แบบ JPEG คุณภาพ 0.9 (90%)
-      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      
-      // ตรวจสอบขนาดของรูปภาพ
-      if (imageDataUrl.length > 5 * 1024 * 1024) { // 5MB
-        throw new Error('ขนาดรูปภาพใหญ่เกินไป กรุณาลองใหม่อีกครั้ง');
-      }
-
-      // สร้าง Blob object จาก base64
-      const base64Response = await fetch(imageDataUrl);
-      const blob = await base64Response.blob();
-      
-      // สร้าง File object
-      const file = new File([blob], `camera_${Date.now()}.jpg`, { 
-        type: 'image/jpeg',
-        lastModified: Date.now()
-      });
-
-      // ตรวจสอบ MIME type
-      if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
-        throw new Error('รูปแบบไฟล์ไม่รองรับ ต้องเป็น JPG หรือ PNG เท่านั้น');
-      }
-      
-      // ตรวจสอบขนาดไฟล์
-      if (file.size > 5 * 1024 * 1024) { // 5MB
-        throw new Error('ขนาดไฟล์ใหญ่เกิน 5MB');
-      }
-
-      // อัปเดตรูปภาพใน state ก่อนทำ OCR
-      if (currentImageIdx === 1) {
-        setImage1(imageDataUrl);
-        setEditForm((prev: any) => ({ ...prev, image_url_1: imageDataUrl }));
-      } else if (currentImageIdx === 2) {
-        setImage2(imageDataUrl);
-        setEditForm((prev: any) => ({ ...prev, image_url_2: imageDataUrl }));
-      }
-      
-      // เรียกใช้ handleUpload เพื่อประมวลผล OCR
-      await handleUpload(currentImageIdx, file);
-      
-      // ปิด loading
-      Swal.close();
-      
-    } catch (error) {
-      console.error('Error capturing and processing image:', error);
-      
-      // ปิด loading และแสดงข้อความผิดพลาด
-      Swal.fire({
-        title: 'เกิดข้อผิดพลาด',
-        text: error instanceof Error ? error.message : 'ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง',
-        icon: 'error',
-        confirmButtonText: 'ตกลง'
-      });
-      
-      // รีเซ็ตสถานะกล้อง
-      stopCamera();
-      setShowCameraModal(false);
-    }
-  };
-
-  // เปิด modal เลือกแหล่งที่มาของรูป
+  // Open the picker modal for the selected image slot (choose camera or gallery)
   const openImageSourceModal = (idx: 1 | 2) => {
     setCurrentImageIdx(idx);
-    setShowCameraModal(true);
+    setShowPickerModal(true);
   };
 
-  // เมื่อเลือกแหล่งที่มาของรูป
-  const handleImageSourceSelect = (source: 'camera' | 'file') => {
-    if (source === 'camera') {
-      startCamera();
-    } else {
-      // เปิด file picker
-      if (currentImageIdx === 1 && slipInputRef.current) {
-        slipInputRef.current.click();
-      } else if (currentImageIdx === 2 && attestInputRef.current) {
-        attestInputRef.current.click();
-      }
-      setShowCameraModal(false);
-    }
+  // Convert non-jpeg/png image files (e.g., HEIC) to JPEG using canvas
+  const convertImageFileToJpeg = async (file: File, maxWidth = 2000): Promise<File> => {
+    if (!file) throw new Error('No file');
+    if (file.type === 'image/jpeg' || file.type === 'image/png') return file;
+
+    // Load image
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Error loading image for conversion'));
+    });
+
+    // Resize if needed
+    const ratio = Math.min(1, maxWidth / img.width);
+    const w = Math.round(img.width * ratio);
+    const h = Math.round(img.height * ratio);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+    ctx.drawImage(img, 0, 0, w, h);
+
+    // Convert to JPEG data URL
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    URL.revokeObjectURL(url);
+
+    // Convert dataURL to Blob -> File
+    const blob = await (await fetch(dataUrl)).blob();
+    const jpegFile = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    return jpegFile;
   };
 
-  // เมื่อ component unmount ให้หยุดกล้อง
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [stream]);
+  // Image source selection handled via native file inputs (openImageSourceModal triggers inputs)
+
+  // No camera stream cleanup needed after refactor to native capture inputs.
 
   // ดึงข้อมูลผู้ใช้จาก Firestore
   useEffect(() => {
@@ -1107,27 +1013,56 @@ export default function EditLoadModal({
     fetchUsers();
   }, [user]);
 
-  // Modal เลือกแหล่งที่มาของรูป
-  const ImageSourceModal = () => (
+  // Removed ImageSourceModal and CameraModal components - using native capture via file input
+
+  // Modal that appears when user clicks an image area, to choose camera or gallery
+  const ImagePickerModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-80">
-        <h3 className="text-lg font-bold mb-4">เลือกแหล่งที่มาของรูป</h3>
-        <div className="flex flex-col space-y-4">
+        <h3 className="text-lg font-bold mb-4">แนบรูป</h3>
+        <div className="flex flex-col space-y-3">
           <button
-            onClick={() => handleImageSourceSelect('camera')}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            onClick={async () => {
+              // If desktop and webcam available, open webcam modal; else use native capture input
+              const ua = navigator.userAgent || '';
+              const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+              const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+              setShowPickerModal(false);
+              if (!isMobile && hasGetUserMedia) {
+                // open webcam modal
+                try {
+                  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  setWebcamStream(stream);
+                  // show modal first, video element will be attached in useEffect
+                  setShowWebcamModal(true);
+                } catch (err) {
+                  // fallback to native input if webcam not allowed
+                  if (currentImageIdx === 1) slipInputRef.current?.click();
+                  else if (currentImageIdx === 2) attestInputRef.current?.click();
+                }
+              } else {
+                if (currentImageIdx === 1) slipInputRef.current?.click();
+                else if (currentImageIdx === 2) attestInputRef.current?.click();
+              }
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             ถ่ายรูป
           </button>
           <button
-            onClick={() => handleImageSourceSelect('file')}
+            onClick={() => {
+              // trigger gallery input for current index
+              if (currentImageIdx === 1) slipGalleryRef.current?.click();
+              else if (currentImageIdx === 2) attestGalleryRef.current?.click();
+              setShowPickerModal(false);
+            }}
             className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
           >
-            เลือกจากแกลเลอรี่
+            แนบรูปจากแกลเลอรี่
           </button>
           <button
-            onClick={() => setShowCameraModal(false)}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mt-4"
+            onClick={() => setShowPickerModal(false)}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
           >
             ยกเลิก
           </button>
@@ -1136,35 +1071,66 @@ export default function EditLoadModal({
     </div>
   );
 
-  // Modal กล้องถ่ายรูป
-  const CameraModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50">
-      <div className="w-full max-w-md">
+  // Capture image from webcam video, convert to JPEG file and run OCR
+  const captureFromWebcam = async () => {
+    if (!videoRef.current || !canvasRef.current || !currentImageIdx) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], `webcam_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    // Stop stream
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      setWebcamStream(null);
+    }
+    setShowWebcamModal(false);
+
+    // Pass to handleUpload
+    await handleUpload(currentImageIdx, file);
+  };
+
+  const closeWebcamModal = () => {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      setWebcamStream(null);
+    }
+    setShowWebcamModal(false);
+  };
+
+  // Attach stream to video element when webcam modal opens
+  useEffect(() => {
+    if (showWebcamModal && webcamStream && videoRef.current) {
+      videoRef.current.srcObject = webcamStream;
+      videoRef.current.muted = true; // allow autoplay
+      const p = videoRef.current.play();
+      if (p && p.catch) p.catch(() => {/* ignore play errors */});
+    }
+    return () => {
+      // don't stop stream here; closeWebcamModal handles it
+    };
+  }, [showWebcamModal, webcamStream]);
+
+  const WebcamModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+      <div className="w-full max-w-lg">
         <div className="relative bg-black rounded-lg overflow-hidden">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="w-full h-auto"
-          />
+          <video ref={videoRef} autoPlay playsInline className="w-full h-auto" />
           <canvas ref={canvasRef} className="hidden" />
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex justify-center space-x-4">
-            <button
-              onClick={captureImage}
-              className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white"
-            >
+            <button onClick={captureFromWebcam} className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white">
               <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
             </button>
+            <button onClick={closeWebcamModal} className="px-3 py-1 bg-red-500 text-white rounded">ยกเลิก</button>
           </div>
-          <button
-            onClick={() => {
-              stopCamera();
-              setShowCameraModal(false);
-            }}
-            className="absolute top-4 right-4 text-white text-2xl"
-          >
-            ✕
-          </button>
         </div>
       </div>
     </div>
@@ -1432,17 +1398,39 @@ export default function EditLoadModal({
             </div>
             <div className="text-center text-base font-bold text-black mt-1">Sterile Slip</div>
             <div className="flex gap-2 items-center">
+              {/* Hidden inputs: camera capture and gallery picker for Sterile Slip */}
               <input
                 type="file"
                 accept="image/*"
+                capture="environment"
                 ref={slipInputRef}
+                onChange={async (e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    try {
+                      const original = e.target.files[0];
+                      const file = await convertImageFileToJpeg(original);
+                      await handleUpload(1, file);
+                    } catch (err) {
+                      console.error('Conversion error:', err);
+                      // fallback to original
+                      if (e.target.files && e.target.files[0]) await handleUpload(1, e.target.files[0]);
+                    }
+                  }
+                }}
+                style={{ position: 'absolute', left: '-9999px' }}
+              />
+              <input
+                type="file"
+                accept="image/png, image/jpeg"
+                ref={slipGalleryRef}
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleUpload(1, e.target.files[0]);
                   }
                 }}
-                className="hidden"
+                style={{ position: 'absolute', left: '-9999px' }}
               />
+              {/* inline attach/take buttons removed per request - click image area to open picker */}
               {image1 && (
                 <button 
                   type="button" 
@@ -1486,17 +1474,38 @@ export default function EditLoadModal({
             </div>
             <div className="text-center text-base font-bold text-black mt-1">Attest</div>
             <div className="flex gap-2 items-center">
+              {/* Hidden inputs: camera capture and gallery picker for Attest */}
               <input
                 type="file"
                 accept="image/*"
+                capture="environment"
                 ref={attestInputRef}
+                onChange={async (e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    try {
+                      const original = e.target.files[0];
+                      const file = await convertImageFileToJpeg(original);
+                      await handleUpload(2, file);
+                    } catch (err) {
+                      console.error('Conversion error:', err);
+                      if (e.target.files && e.target.files[0]) await handleUpload(2, e.target.files[0]);
+                    }
+                  }
+                }}
+                style={{ position: 'absolute', left: '-9999px' }}
+              />
+              <input
+                type="file"
+                accept="image/png, image/jpeg"
+                ref={attestGalleryRef}
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleUpload(2, e.target.files[0]);
                   }
                 }}
-                className="hidden"
+                style={{ position: 'absolute', left: '-9999px' }}
               />
+              {/* inline attach/take buttons removed per request - click image area to open picker */}
               {editForm.image_url_2 && (
                 <button 
                   type="button" 
@@ -1630,11 +1639,10 @@ export default function EditLoadModal({
           </div>
         </div>
       )}
+  {showPickerModal && <ImagePickerModal />}
+  {showWebcamModal && <WebcamModal />}
       {/* Image Source Selection Modal */}
-      {showCameraModal && !stream && <ImageSourceModal />}
-      
-      {/* Camera Modal */}
-      {showCameraModal && stream && <CameraModal />}
+  {/* Native file inputs handle capture; old camera modals removed */}
     </div>
   );
 }
