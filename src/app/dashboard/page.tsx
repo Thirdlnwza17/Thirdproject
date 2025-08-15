@@ -106,6 +106,18 @@ export default function DashboardPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+
+  // Refs for native date inputs so we can trigger the native picker while showing formatted value
+  const dashboardStartDateRef = useRef<HTMLInputElement | null>(null);
+  const dashboardEndDateRef = useRef<HTMLInputElement | null>(null);
+
+  const formatToYyMmDd = (iso: string) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    const [yyyy, mm, dd] = parts;
+    return `${yyyy}/${mm}/${dd}`;
+  };
   // State for checkbox demo
   type CheckboxType = 'mechanical' | 'chemical_external' | 'chemical_internal';
   const [checkboxDemo] = useState<Record<CheckboxType, string>>({
@@ -502,8 +514,8 @@ export default function DashboardPage() {
           </div>
 
           {/* Date Filter */}
-          <div className="w-full mb-8">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col gap-4 border border-blue-100">
+          <div className="w-full mb-10">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col gap-4 md:gap-6 border border-blue-100">
               <h3 className="text-xl md:text-2xl font-bold text-blue-800 mb-2 flex items-center gap-2">
                 <span className="inline-block text-2xl">📅</span> กรองข้อมูลตามช่วงวันที่
               </h3>
@@ -558,24 +570,46 @@ export default function DashboardPage() {
 
               <div className="flex flex-col sm:flex-row gap-4 w-full">
                 <div className="flex items-center gap-2 w-full">
-                  <input
-                    type="date"
-                    className="flex-1 min-w-0 px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base text-black placeholder-black shadow-sm transition-all duration-200"
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                    max={endDate || undefined}
-                  />
+                  <div className="relative flex-1">
+                    <button
+                      type="button"
+                      onClick={() => dashboardStartDateRef.current?.showPicker ? dashboardStartDateRef.current.showPicker() : dashboardStartDateRef.current?.click()}
+                      className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-300 bg-white text-sm sm:text-base text-black shadow-sm"
+                    >
+                      {formatToYyMmDd(startDate) || 'yyyy/mm/dd'}
+                    </button>
+                    <input
+                      ref={dashboardStartDateRef}
+                      type="date"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      max={endDate || undefined}
+                      className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
+                      aria-hidden="true"
+                    />
+                  </div>
                   <span className="text-gray-500 text-base font-bold hidden sm:inline">-</span>
                 </div>
                 <div className="flex items-center gap-2 w-full">
                   <span className="text-gray-500 text-base font-bold sm:hidden">ถึง</span>
-                  <input
-                    type="date"
-                    className="flex-1 min-w-0 px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm sm:text-base text-black placeholder-black shadow-sm transition-all duration-200"
-                    value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
-                    min={startDate || undefined}
-                  />
+                  <div className="relative flex-1">
+                    <button
+                      type="button"
+                      onClick={() => dashboardEndDateRef.current?.showPicker ? dashboardEndDateRef.current.showPicker() : dashboardEndDateRef.current?.click()}
+                      className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-gray-300 bg-white text-sm sm:text-base text-black shadow-sm"
+                    >
+                      {formatToYyMmDd(endDate) || 'yyyy/mm/dd'}
+                    </button>
+                    <input
+                      ref={dashboardEndDateRef}
+                      type="date"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      min={startDate || undefined}
+                      className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
+                      aria-hidden="true"
+                    />
+                  </div>
                   {(startDate || endDate) && (
                     <button
                       className="px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-300 text-gray-700 font-semibold rounded-xl text-sm sm:text-base shadow transition-all duration-150 whitespace-nowrap"

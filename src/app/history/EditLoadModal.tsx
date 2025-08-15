@@ -61,6 +61,41 @@ export default function EditLoadModal({
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // OCR loading / progress
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const ocrIntervalRef = useRef<number | null>(null);
+
+  // OCR raw text storage for inspection
+  const [ocrText1, setOcrText1] = useState<string>(editForm._ocr_text_1 || '');
+  const [ocrText2, setOcrText2] = useState<string>(editForm._ocr_text_2 || '');
+  // Note: inspection modal removed per request. Raw OCR text is still stored in form.
+
+  const startOcrProgress = () => {
+    if (ocrIntervalRef.current) window.clearInterval(ocrIntervalRef.current);
+    setIsOcrLoading(true);
+    setOcrProgress(5);
+    // simulate progressive progress until final stop
+    ocrIntervalRef.current = window.setInterval(() => {
+      setOcrProgress(p => {
+        const next = Math.min(95, p + Math.random() * 12);
+        return Math.round(next);
+      });
+    }, 500) as unknown as number;
+  };
+
+  const stopOcrProgress = (final = true) => {
+    if (ocrIntervalRef.current) {
+      window.clearInterval(ocrIntervalRef.current);
+      ocrIntervalRef.current = null;
+    }
+    if (final) setOcrProgress(100);
+    // keep 100% visible briefly then hide
+    setTimeout(() => {
+      setIsOcrLoading(false);
+      setOcrProgress(0);
+    }, 450);
+  };
   
   // State สำหรับวันที่
   const [date, setDate] = useState(editForm.date || "");
@@ -471,6 +506,7 @@ export default function EditLoadModal({
       }
       if (idx === 1) {
         // OCR + Claude AI ตรวจสอบ slip เฉพาะช่อง 1
+        startOcrProgress();
         try {
           const base64Data = base64.split(',')[1];
           const response = await fetch('/api/claude-ocr', {
@@ -484,6 +520,9 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
+          // store raw ocr text for inspection
+          setOcrText1(ocrRaw);
+          setEditForm((prev: any) => ({ ...prev, _ocr_text_1: ocrRaw }));
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword.toUpperCase()));
           if (!isSlip) {
@@ -593,16 +632,21 @@ export default function EditLoadModal({
               timer: 2000,
               showConfirmButton: false
             });
+          } finally {
+            // stop progress regardless
+            stopOcrProgress();
           }
           setImage1(base64);
           setEditForm((prev: any) => ({ ...prev, image_url_1: base64 }));
         } catch (error) {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
+          stopOcrProgress();
           return;
         }
       } else {
         // OCR + Claude AI ตรวจสอบ attest เฉพาะช่อง 2
         try {
+          startOcrProgress();
           const base64Data = base64.split(',')[1];
           const response = await fetch('/api/claude-ocr', {
             method: 'POST',
@@ -615,6 +659,9 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
+          // store raw ocr text for inspection
+          setOcrText2(ocrRaw);
+          setEditForm((prev: any) => ({ ...prev, _ocr_text_2: ocrRaw }));
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           console.log('OCR RAW:', ocrRaw); // debug
 
@@ -722,6 +769,8 @@ export default function EditLoadModal({
         } catch (error) {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           return;
+        } finally {
+          stopOcrProgress();
         }
       }
     };
@@ -1471,6 +1520,7 @@ export default function EditLoadModal({
                   ลบรูป
                 </button>
               )}
+              {/* Inspection button removed */}
             </div>
             <div className="text-center text-base font-bold text-black mt-1">Attest</div>
             <div className="flex gap-2 items-center">
@@ -1548,6 +1598,7 @@ export default function EditLoadModal({
                   ลบรูป
                 </button>
               )}
+              {/* Inspection button removed */}
             </div>
             <div
               tabIndex={0}
@@ -1604,6 +1655,17 @@ export default function EditLoadModal({
         </div>
         {error && <div className="text-red-600 mt-2 text-center">{error}</div>}
       </div>
+      {isOcrLoading && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto bg-black/60 rounded-lg p-4 w-72 text-center">
+            <div className="text-white font-bold mb-2">กำลังประมวลผลรูปภาพ (OCR)</div>
+            <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden mb-2">
+              <div className="bg-white h-full" style={{ width: `${ocrProgress}%` }} />
+            </div>
+            <div className="text-white text-sm">{ocrProgress}%</div>
+          </div>
+        </div>
+      )}
       {zoomImage && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setZoomImage(null)}>
           <div className="relative" onClick={e => e.stopPropagation()}>
@@ -1643,6 +1705,7 @@ export default function EditLoadModal({
   {showWebcamModal && <WebcamModal />}
       {/* Image Source Selection Modal */}
   {/* Native file inputs handle capture; old camera modals removed */}
+  {/* OCR inspection modal removed per user request */}
     </div>
   );
 }

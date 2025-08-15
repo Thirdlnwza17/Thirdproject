@@ -80,24 +80,14 @@ export default function HistoryPage() {
     return numericValue;
   };
 
+  // Use ISO date strings for start/end for simpler UX
   const [dateRange, setDateRange] = useState({
-    startYear: '',
-    startMonth: '',
-    startDay: '',
-    endYear: '',
-    endMonth: '',
-    endDay: ''
+    startDate: '',
+    endDate: ''
   });
 
-  // Get days for start and end date based on selected year and month
-  const startDays = getDaysInMonth(dateRange.startYear, dateRange.startMonth);
-  const endDays = getDaysInMonth(dateRange.endYear, dateRange.endMonth);
-
-  // Convert separate date parts to YYYY-MM-DD format
-  const formatDate = (year: string, month: string, day: string) => {
-    if (!year || !month || !day) return '';
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  };
+  // helper to ensure ISO date strings (YYYY-MM-DD)
+  const ensureIso = (v: string) => v ? v.slice(0,10) : '';
 
   // Set date range based on filter type (today, week, month, year)
   const setDateRangeFilter = (type: 'today' | 'week' | 'month' | 'year') => {
@@ -135,53 +125,35 @@ export default function HistoryPage() {
     const end = formatDatePart(today);
 
     setDateRange({
-      startYear: start.year,
-      startMonth: start.month,
-      startDay: start.day,
-      endYear: end.year,
-      endMonth: end.month,
-      endDay: end.day
+      startDate: `${start.year}-${start.month}-${start.day}`,
+      endDate: `${end.year}-${end.month}-${end.day}`
     });
   };
 
-  const handleDatePartChange = (field: keyof typeof dateRange, value: string, maxLength?: number) => {
-    // Filter input if maxLength is provided
-    const filteredValue = maxLength ? filterNumericInput(value, maxLength) : value;
-    
-    const newDateRange = {
-      ...dateRange,
-      [field]: filteredValue
-    };
-    
-    // Reset day if month or year changes
-    if (field === 'startYear' || field === 'startMonth') {
-      newDateRange.startDay = '';
-    }
-    if (field === 'endYear' || field === 'endMonth') {
-      newDateRange.endDay = '';
-    }
-    
-    // Auto-format months and days to 2 digits if needed
-    if ((field === 'startMonth' || field === 'endMonth') && filteredValue.length === 1) {
-      newDateRange[field] = filteredValue.padStart(2, '0');
-    }
-    if ((field === 'startDay' || field === 'endDay') && filteredValue.length === 1) {
-      newDateRange[field] = filteredValue.padStart(2, '0');
-    }
-    
-    setDateRange(newDateRange);
+  const handleStartDateChange = (value: string) => {
+    setDateRange(prev => ({ ...prev, startDate: ensureIso(value) }));
+  };
+
+  const handleEndDateChange = (value: string) => {
+    setDateRange(prev => ({ ...prev, endDate: ensureIso(value) }));
+  };
+
+  // Refs for native date inputs so we can trigger the native picker while showing a custom formatted value
+  const startDateInputRef = useRef<HTMLInputElement | null>(null);
+  const endDateInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Format ISO (YYYY-MM-DD) to yyyy/mm/dd for display (no timezone conversion)
+  const formatToYyMmDd = (iso: string) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    const [yyyy, mm, dd] = parts;
+    return `${yyyy}/${mm}/${dd}`;
   };
 
   const handleClearAllFilters = () => {
     setClearAllFiltersTrigger(t => t + 1);
-    setDateRange({
-      startYear: '',
-      startMonth: '',
-      startDay: '',
-      endYear: '',
-      endMonth: '',
-      endDay: ''
-    });
+  setDateRange({ startDate: '', endDate: '' });
   };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -927,8 +899,9 @@ export default function HistoryPage() {
         </div>
         {user && (
           <div className="w-full mb-2 flex justify-end">
-            <div className="bg-purple-100 text-purple-700 rounded-full px-4 py-1 text-sm font-semibold shadow text-center">
-              👤 {user.displayName || user.email}
+            <div className="bg-purple-100 text-purple-700 rounded-full px-6 py-2 text-base font-semibold shadow min-w-[120px] flex items-center justify-center">
+              <span className="mr-2">👤</span>
+              <span className="truncate">{user.displayName || user.email}</span>
             </div>
           </div>
         )}
@@ -968,107 +941,49 @@ export default function HistoryPage() {
             </div>
           </div>
 
-          {/* Date Range Selectors */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {/* Date Range Selectors - use native date inputs for simpler UX */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4 md:mb-6">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">จากวันที่</label>
-              <div className="flex space-x-2 items-center">
-                <div className="w-24">
-                  <select
-                    value={dateRange.startYear}
-                    onChange={(e) => handleDatePartChange('startYear', e.target.value, 4)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border"
-                  >
-                    <option value="">ปี</option>
-                    {years.map(year => (
-                      <option key={`start-year-${year}`} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-20">
-                  <select
-                    value={dateRange.startMonth}
-                    onChange={(e) => handleDatePartChange('startMonth', e.target.value, 2)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
-                    disabled={!dateRange.startYear}
-                  >
-                    <option value="">เดือน</option>
-                    {months.map(month => (
-                      <option key={`start-month-${month}`} value={month}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-20">
-                  <select
-                    value={dateRange.startDay}
-                    onChange={(e) => handleDatePartChange('startDay', e.target.value, 2)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
-                    disabled={!dateRange.startMonth}
-                  >
-                    <option value="">วัน</option>
-                    {startDays.map(day => (
-                      <option key={`start-day-${day}`} value={day}>
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="relative">
+                {/* Visible formatted box */}
+                <button
+                  type="button"
+                  onClick={() => startDateInputRef.current?.showPicker ? startDateInputRef.current.showPicker() : startDateInputRef.current?.click()}
+                  className="w-full text-left rounded-md border border-gray-300 bg-white p-2 text-sm shadow-sm"
+                >
+                  {formatToYyMmDd(dateRange.startDate) || 'yyyy/mm/dd'}
+                </button>
+                {/* Native date input kept visually hidden but accessible for native pickers */}
+                <input
+                  ref={startDateInputRef}
+                  type="date"
+                  value={dateRange.startDate}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
+                  aria-hidden="true"
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-0.5">วันที่สิ้นสุด</label>
-              <div className="flex space-x-2 items-center">
-                <div className="w-28">
-                  <select
-                    value={dateRange.endYear}
-                    onChange={(e) => handleDatePartChange('endYear', e.target.value, 4)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
-                  >
-                    <option value="">ปี</option>
-                    {years.map(year => (
-                      <option key={`end-year-${year}`} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <span>/</span>
-                <div className="w-20">
-                  <select
-                    value={dateRange.endMonth}
-                    onChange={(e) => handleDatePartChange('endMonth', e.target.value, 2)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border text-center"
-                    disabled={!dateRange.endYear}
-                  >
-                    <option value="">เดือน</option>
-                    {months.map(month => (
-                      <option key={`end-month-${month}`} value={month}>
-                        {month}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <span>/</span>
-                <div className="w-20">
-                  <select
-                    value={dateRange.endDay}
-                    onChange={(e) => handleDatePartChange('endDay', e.target.value, 2)}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm p-2 border disabled:bg-gray-100"
-                    disabled={!dateRange.endYear || !dateRange.endMonth}
-                  >
-                    <option value="">วัน</option>
-                    {endDays.map(day => (
-                      <option key={`end-day-${day}`} value={day}>
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => endDateInputRef.current?.showPicker ? endDateInputRef.current.showPicker() : endDateInputRef.current?.click()}
+                  className="w-full text-left rounded-md border border-gray-300 bg-white p-2 text-sm shadow-sm"
+                >
+                  {formatToYyMmDd(dateRange.endDate) || 'yyyy/mm/dd'}
+                </button>
+                <input
+                  ref={endDateInputRef}
+                  type="date"
+                  value={dateRange.endDate}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
+                  className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
+                  aria-hidden="true"
+                />
               </div>
             </div>
 
@@ -1088,10 +1003,7 @@ export default function HistoryPage() {
         <SterilizerLoadsCardView 
           user={user} 
           clearAllFiltersTrigger={clearAllFiltersTrigger} 
-          dateRange={{
-            startDate: formatDate(dateRange.startYear, dateRange.startMonth, dateRange.startDay),
-            endDate: formatDate(dateRange.endYear, dateRange.endMonth, dateRange.endDay)
-          }}
+          dateRange={dateRange}
         />
         
         {/* Modal Edit */}

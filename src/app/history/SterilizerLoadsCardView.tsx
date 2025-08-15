@@ -399,8 +399,8 @@ export default function SterilizerLoadsCardView({
 
   return (
     <>
-      {/* Filter dropdown */}
-      <div className="flex flex-wrap items-center gap-4 mb-4">
+  {/* Filter dropdown */}
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-3 mb-6">
         {/* Staff Filter */}
         <div className="flex items-center">
           <label className="font-bold text-gray-700 whitespace-nowrap mr-2">เจ้าหน้าที่:</label>
