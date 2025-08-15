@@ -434,7 +434,7 @@ export default function SterilizerLoadsCardView({
         <input
           className="border rounded px-2 py-1 text-black bg-white w-60 order-first"
           type="text"
-          placeholder="ค้นหาชื่ออุปกรณ์, operator, เครื่องอบฆ่าเชื้อ"
+          placeholder="ค้นหา อุปกรณ์ และ รอบการฆ่าเชื้อ"
           value={searchText}
           onChange={e => { setSearchText(e.target.value); setCurrentPage(1); }}
           style={{ minWidth: 220 }}
