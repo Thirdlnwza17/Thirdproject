@@ -42,7 +42,7 @@ export default function ImageModal({ show, imageUrl, zoom, offset, dragging, onC
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
         >
-          // eslint-disable-next-line @next/next/no-img-element
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imageUrl}
             alt="Full OCR"
