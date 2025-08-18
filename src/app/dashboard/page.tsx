@@ -8,17 +8,10 @@ import Link from "next/link";
 import Image from 'next/image';
 import { getUserRole, subscribeToSterilizerLoads } from "@/dbService";
 
-import { STATUS_OPTIONS, MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
+import { MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
 import ProgramAnalyticsChart, { ProgramAnalyticsData } from "./ProgramAnalyticsChart";
 import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry } from "./analyticsService";
 
-interface CheckboxResults {
-  chemical_external?: boolean;
-  chemical_internal?: boolean;
-  mechanical?: boolean;
-  biological?: boolean;
-  [key: string]: any;
-}
 
 
 function normalizeStatus(status: any): "PASS" | "FAIL" | "CANCEL" {
@@ -44,8 +37,6 @@ function getEntryStatus(data: any): "PASS" | "FAIL" | "CANCEL" {
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-  // กำหนด interface สำหรับผลการตรวจสอบแต่ละตัว (Indicator)
   interface CheckboxResults {
     chemical_external?: string | boolean;
     chemical_internal?: string | boolean;
@@ -75,11 +66,11 @@ export default function DashboardPage() {
   const unsubEntriesRef = useRef<null | (() => void)>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [entriesPerPage] = useState(10);
-  const [selectedProgram, setSelectedProgram] = useState<string>("ALL");
-  const [selectedIndicators, setSelectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
+  const [selectedProgram] = useState<string>("ALL");
+  const [selectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
   const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
-  const [isAttestTableExpanded, setIsAttestTableExpanded] = useState(true);
   const [isProgramDetailsExpanded, setIsProgramDetailsExpanded] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
   // Toggle program expansion
   const toggleProgram = (programLabel: string) => {
@@ -89,10 +80,7 @@ export default function DashboardPage() {
     }));
   };
 
-  const toggleAttestTable = () => {
-    setIsAttestTableExpanded(!isAttestTableExpanded);
-  };
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -344,7 +332,6 @@ export default function DashboardPage() {
   };
 
   // --- สรุป attest_table ---
-  // AttestSummary type removed (unused)
   // Calculate attest table summaries with date filtering
   const calculateAttestSummary = (allEntries: DashboardEntry[], sn: string) => {
     const summary = Array(10).fill(0).map(() => ({

@@ -50,47 +50,30 @@ export default function SterilizerLoadsCardView({
   clearAllFiltersTrigger,
   dateRange = { startDate: '', endDate: '' } 
 }: SterilizerLoadsCardViewProps) {
-  // State สำหรับ Card View
+  // State for Card View
   const [loads, setLoads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
   const [autoclaveSub, setAutoclaveSub] = useState('All');
   const cardsPerPage = 6;
   const [currentPage, setCurrentPage] = useState(1);
-  const [selected, setSelected] = useState<any | null>(null);
   const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
   const cardRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
-  // เพิ่ม state สำหรับ modal edit
+  // State for edit modal
   const [editForm, setEditForm] = useState<any | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editError, setEditError] = useState("");
-  // State สำหรับ filter เพิ่มเติม
+  
+  // State for filters
+  const [staffList, setStaffList] = useState<{id: string, fullName: string}[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState("");
+  const [snFilter, setSnFilter] = useState('');
+  const [searchText, setSearchText] = useState("");
   const [mechanicalFilter, setMechanicalFilter] = useState("");
   const [chemicalExternalFilter, setChemicalExternalFilter] = useState("");
   const [chemicalInternalFilter, setChemicalInternalFilter] = useState("");
   const [bioTestFilter, setBioTestFilter] = useState("");
-  // SN Filter
-  const [snFilter, setSnFilter] = useState('');
-  // State สำหรับ search
-  const [searchText, setSearchText] = useState("");
-  
-  // State สำหรับ staff filter
-  const [staffList, setStaffList] = useState<{id: string, fullName: string}[]>([]);
-  const [selectedStaff, setSelectedStaff] = useState("");
-
-  // State สำหรับ modal image, zoom, drag
-  const [showBigImage1, setShowBigImage1] = useState(false);
-  const [showBigImage2, setShowBigImage2] = useState(false);
-  const [zoomBig1, setZoomBig1] = useState(1);
-  const [offsetBig1, setOffsetBig1] = useState({ x: 0, y: 0 });
-  const [draggingBig1, setDraggingBig1] = useState(false);
-  const dragStartBig1 = useRef({ x: 0, y: 0 });
-  const offsetStartBig1 = useRef({ x: 0, y: 0 });
-  const [zoomBig2, setZoomBig2] = useState(1);
-  const [offsetBig2, setOffsetBig2] = useState({ x: 0, y: 0 });
-  // Note: removed unused drag/overlay refs for the second image (were causing lint warnings)
-  const overlayRef1 = useRef<HTMLDivElement>(null);
 
   // Fetch staff list from Firestore
   useEffect(() => {
