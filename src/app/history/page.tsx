@@ -46,25 +46,7 @@ import { SterilizerEntry } from "@/dbService";
 export default function HistoryPage() {
   // ...
   const [clearAllFiltersTrigger, setClearAllFiltersTrigger] = useState(0);
-  // Current year for date calculations
-  const currentYear = new Date().getFullYear();
-  
-  // Function to get days in a month
-  const getDaysInMonth = (year: string, month: string): string[] => {
-    if (!year || !month) {
-      // Return array of 31 days as strings when year or month is not selected
-      return Array.from({ length: 31 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-    }
-    const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
-    return Array.from({ length: lastDay }, (_, i) => (i + 1).toString().padStart(2, '0'));
-  };
-
-  // Filter function for input values
-  const filterNumericInput = (value: string, maxLength: number): string => {
-    // Only allow numbers and limit length
-    const numericValue = value.replace(/[^0-9]/g, '').slice(0, maxLength);
-    return numericValue;
-  };
+  // Date and input handling functions removed as they're not used
 
   // Use ISO date strings for start/end for simpler UX
   const [dateRange, setDateRange] = useState({
@@ -144,8 +126,6 @@ export default function HistoryPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<SterilizerEntry[]>([]); // main entry state
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<'manual' | 'ocr'>('manual');
   const [edit, setEdit] = useState<SterilizerEntry | null>(null);
   const [editForm, setEditForm] = useState<Partial<SterilizerEntry>>({});
   const [editLoading, setEditLoading] = useState(false);
@@ -180,23 +160,12 @@ export default function HistoryPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // เพิ่ม state zoom/offset สำหรับ modal edit OCR
-  const [ocrZoom, setOcrZoom] = useState(1);
-  const [ocrOffset, setOcrOffset] = useState({ x: 0, y: 0 });
-  const [ocrDragging, setOcrDragging] = useState(false);
-  const ocrDragStart = useRef({ x: 0, y: 0 });
-  const ocrOffsetStart = useRef({ x: 0, y: 0 });
-  const ocrTouchStart = useRef({ x: 0, y: 0, distance: 0 });
+  // OCR state
 
   // เพิ่ม state สำหรับเก็บผลลัพธ์ล่าสุดจาก OCR API
   const [lastOcrApiResult, setLastOcrApiResult] = useState<Record<string, unknown> | null>(null);
 
-  // --- เพิ่ม state zoom/offset/dragging สำหรับ modal edit ---
-  const [zoom1, setZoom1] = useState(1);
-  const [offset1, setOffset1] = useState({ x: 0, y: 0 });
-  const [dragging1, setDragging1] = useState(false);
-  const dragStart1 = useRef({ x: 0, y: 0 });
-  const offsetStart1 = useRef({ x: 0, y: 0 });
+  // Image zoom/pan state for edit modal
   const [zoom2, setZoom2] = useState(1);
   const [offset2, setOffset2] = useState({ x: 0, y: 0 });
   const [dragging2, setDragging2] = useState(false);
@@ -684,8 +653,6 @@ export default function HistoryPage() {
     await saveOcrEntry();
   };
 
-  // handleChange removed (not used in this file)
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -723,8 +690,6 @@ export default function HistoryPage() {
       setSuccessMsg("บันทึกข้อมูลรอบการทำงานสำเร็จ!");
       setForm(initialForm);
       setShowForm(false);
-      setSearch("");
-      setActiveTab("manual");
     } catch {
       setErrorMsg("เกิดข้อผิดพลาด");
     } finally {
@@ -738,8 +703,7 @@ export default function HistoryPage() {
   // Reset zoom/offset when modal opens/closes
   useEffect(() => {
     if (editOcr) {
-      setOcrZoom(1);
-      setOcrOffset({ x: 0, y: 0 });
+      // OCR zoom/offset reset removed as it wasn't being used
     }
   }, [editOcr]);
 

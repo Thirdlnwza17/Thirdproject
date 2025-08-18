@@ -70,8 +70,6 @@ export default function DashboardPage() {
   const [selectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
   const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
   const [isProgramDetailsExpanded, setIsProgramDetailsExpanded] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-
   // Toggle program expansion
   const toggleProgram = (programLabel: string) => {
     setExpandedPrograms(prev => ({
@@ -79,7 +77,6 @@ export default function DashboardPage() {
       [programLabel]: !prev[programLabel]
     }));
   };
-
 
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -95,13 +92,8 @@ export default function DashboardPage() {
     const [yyyy, mm, dd] = parts;
     return `${yyyy}/${mm}/${dd}`;
   };
-  // State for checkbox demo
+  // Checkbox types
   type CheckboxType = 'mechanical' | 'chemical_external' | 'chemical_internal';
-  const [checkboxDemo] = useState<Record<CheckboxType, string>>({
-    mechanical: 'unknown',
-    chemical_external: 'unknown',
-    chemical_internal: 'unknown',
-  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -157,7 +149,6 @@ export default function DashboardPage() {
       },
       (error) => {
         console.error('Error in sterilizer loads subscription:', error);
-        setErrorMsg('เกิดข้อผิดพลาดในการโหลดข้อมูล');
       }
     );
     
@@ -189,27 +180,10 @@ export default function DashboardPage() {
     return false;
   });
 
-  // คำนวณ pagination
+  // Calculate pagination
   const indexOfLastEntry = currentPage * entriesPerPage;
   const indexOfFirstEntry = indexOfLastEntry - entriesPerPage;
-  const currentEntries = recentEntries.slice(indexOfFirstEntry, indexOfLastEntry);
   const totalPages = Math.ceil(recentEntries.length / entriesPerPage);
-
-  const nextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const goToPage = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-  };
 
   const handleLogout = async () => {
     if (unsubEntriesRef.current) unsubEntriesRef.current();
@@ -283,8 +257,6 @@ export default function DashboardPage() {
     });
   }
 
-  // คำนวณจำนวน pass/fail/total จาก filteredEntriesNoStatus (local unused counters removed)
-
   // Calculate analytics for each program
   const programAnalytics = MAIN_PROGRAMS.concat(AUTOCLAVE_SUBPROGRAMS).map(prog => 
     calculateProgramAnalytics(filteredEntriesNoStatus as AnalyticsSterilizerEntry[], prog.key)
@@ -330,59 +302,6 @@ export default function DashboardPage() {
       counts: weekdayCounts
     }
   };
-
-  // --- สรุป attest_table ---
-  // Calculate attest table summaries with date filtering
-  const calculateAttestSummary = (allEntries: DashboardEntry[], sn: string) => {
-    const summary = Array(10).fill(0).map(() => ({
-      used: 0,
-      pass: 0,
-      fail: 0,
-      passRate: 0
-    }));
-
-    // Filter entries by date range first
-    const filteredEntries = allEntries.filter(entry => {
-      if (!entry.created_at) return false;
-      try {
-        const entryDate = entry.created_at.toDate();
-        const start = startDate ? new Date(startDate + 'T00:00:00') : null;
-        const end = endDate ? new Date(endDate + 'T23:59:59') : null;
-        if (start && end) return entryDate >= start && entryDate <= end;
-        if (start) return entryDate >= start;
-        if (end) return entryDate <= end;
-        return true;
-      } catch (error) {
-        console.error('Error processing date:', entry.created_at, error);
-        return false;
-      }
-    });
-
-    // Process only the date-filtered entries
-    filteredEntries.forEach(entry => {
-      if (entry.attest_sn === sn && Array.isArray(entry.attest_table)) {
-        entry.attest_table.forEach((item, idx) => {
-          if (idx < 10) { // Only process first 10 slots
-            if (item) {
-              summary[idx].used++;
-              if (isPass(item)) {
-                summary[idx].pass++;
-              } else {
-                summary[idx].fail++;
-              }
-              summary[idx].passRate = summary[idx].used > 0 
-                ? (summary[idx].pass / summary[idx].used) * 100 
-                : 0;
-            }
-          }
-        });
-      }
-    });
-
-    return summary;
-  };
-
-  // attest summary calculations removed (unused)
 
   if (loading || (role && role !== 'admin')) {
     return (
