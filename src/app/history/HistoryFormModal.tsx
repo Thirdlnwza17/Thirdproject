@@ -99,7 +99,7 @@ export default function HistoryFormModal({
         ...(prev.items === undefined && { items: [] })
       }));
     }
-  }, [show, user]); // Run when modal is shown or user changes
+  }, [show, user, setForm]); // Run when modal is shown or user changes
 
   // Save staff and reader to localStorage when they change
   useEffect(() => {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signOut, onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
 import Link from "next/link";
+import Image from 'next/image';
 import { getUserRole, subscribeToSterilizerLoads } from "@/dbService";
 
 import { STATUS_OPTIONS, MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS, PROGRAM_FILTERS, ALL_FILTERS, INDICATOR_FILTERS } from "./constants";
@@ -240,10 +241,7 @@ export default function DashboardPage() {
     router.replace("/login");
   };
 
-  const showDetail = (entry: any) => {
-    setSelectedEntry(entry);
-    setShowDetailModal(true);
-  };
+  // showDetail removed (unused)
 
   // ฟังก์ชันช่วยตรวจสอบค่าที่ถือว่า "ผ่าน"
   function isPass(val: any) {
@@ -309,15 +307,7 @@ export default function DashboardPage() {
     });
   }
 
-  // คำนวณจำนวน pass/fail/total จาก filteredEntriesNoStatus
-  const passCount = filteredEntriesNoStatus.filter(e => e.status === "PASS").length;
-  const failCount = filteredEntriesNoStatus.filter(e => e.status === "FAIL").length;
-  const totalEntries = filteredEntriesNoStatus.length;
-
-  // filter สถานะสำหรับตาราง
-  const filteredEntries = selectedStatus !== 'ALL' 
-    ? filteredEntriesNoStatus.filter(e => e.status === selectedStatus)
-    : filteredEntriesNoStatus;
+  // คำนวณจำนวน pass/fail/total จาก filteredEntriesNoStatus (local unused counters removed)
 
   // Calculate analytics for each program
   const programAnalytics = MAIN_PROGRAMS.concat(AUTOCLAVE_SUBPROGRAMS).map(prog => 
@@ -366,7 +356,7 @@ export default function DashboardPage() {
   };
 
   // --- สรุป attest_table ---
-  type AttestSummary = { used: number, pass: number, fail: number, passRate: number }[];
+  // AttestSummary type removed (unused)
   // Calculate attest table summaries with date filtering
   const calculateAttestSummary = (allEntries: DashboardEntry[], sn: string) => {
     const summary = Array(10).fill(0).map(() => ({
@@ -417,10 +407,7 @@ export default function DashboardPage() {
     return summary;
   };
 
-  // เฉพาะ 490 (SN 101715)
-  const attestSummary490 = calculateAttestSummary(entries, "101715");
-  // เฉพาะ 390G (SN 431930)
-  const attestSummary390 = calculateAttestSummary(entries, "431930");
+  // attest summary calculations removed (unused)
 
   if (loading || (role && role !== 'admin')) {
     return (
@@ -457,7 +444,9 @@ export default function DashboardPage() {
         </div>
         {/* Header section: logo left, title right */}
         <div className="w-full flex flex-row items-center mb-4">
-          <img src="/ram-logo.jpg" alt="Sterilizer Logo" className="w-40 h-40 object-contain drop-shadow-xl bg-white rounded-2xl p-2 mr-4" />
+          <div className="w-40 h-40 relative mr-4">
+            <Image src="/ram-logo.jpg" alt="Sterilizer Logo" fill className="object-contain drop-shadow-xl bg-white rounded-2xl p-2" />
+          </div>
           <div className="flex flex-col justify-center">
             <h1 className="text-2xl md:text-3xl font-bold mb-2 drop-shadow text-center">
               <span className="text-sky-400">Central Supply Sterile Quality</span>{' '}

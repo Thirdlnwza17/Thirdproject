@@ -89,13 +89,8 @@ export default function SterilizerLoadsCardView({
   const offsetStartBig1 = useRef({ x: 0, y: 0 });
   const [zoomBig2, setZoomBig2] = useState(1);
   const [offsetBig2, setOffsetBig2] = useState({ x: 0, y: 0 });
-  const [draggingBig2, setDraggingBig2] = useState(false);
-  const dragStartBig2 = useRef({ x: 0, y: 0 });
-  const offsetStartBig2 = useRef({ x: 0, y: 0 });
+  // Note: removed unused drag/overlay refs for the second image (were causing lint warnings)
   const overlayRef1 = useRef<HTMLDivElement>(null);
-  const overlayRef2 = useRef<HTMLDivElement>(null);
-  const lastTapBig1 = useRef(0);
-  const lastTapBig2 = useRef(0);
 
   // Fetch staff list from Firestore
   useEffect(() => {
@@ -127,16 +122,22 @@ export default function SterilizerLoadsCardView({
     setLoading(true);
     const db = getFirestore();
     const q = query(collection(db, 'sterilizer_loads'), orderBy('created_at', 'desc'));
+    // Use a ref to ignore the initial snapshot when deciding if a new document was added
+    const initialSnapshot = { current: true } as { current: boolean };
     const unsub = onSnapshot(q, (snapshot) => {
       const updatedLoads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setLoads(updatedLoads);
-      
-      // ตรวจสอบว่ามีการเพิ่มข้อมูลใหม่หรือไม่
-      if (updatedLoads.length > 0 && (loads.length === 0 || updatedLoads[0].id !== loads[0]?.id)) {
-        setLastUpdatedId(updatedLoads[0].id);
-        setCurrentPage(1); // กลับไปที่หน้าแรกเมื่อมีการเพิ่มข้อมูลใหม่
+
+      // ตรวจสอบว่ามีการเพิ่มข้อมูลใหม่หรือไม่ (ใช้ docChanges เพื่อหาการเพิ่ม)
+      if (!initialSnapshot.current) {
+        const added = snapshot.docChanges().some(change => change.type === 'added');
+        if (added && updatedLoads.length > 0) {
+          setLastUpdatedId(updatedLoads[0].id);
+          setCurrentPage(1); // กลับไปที่หน้าแรกเมื่อมีการเพิ่มข้อมูลใหม่
+        }
       }
-      
+
+      initialSnapshot.current = false;
       setLoading(false);
     });
     return () => unsub();
@@ -630,6 +631,7 @@ export default function SterilizerLoadsCardView({
               {[1,2].map(idx => (
                 <div key={`image-${load.id}-${idx}`} className="flex flex-col items-center">
                   {load[`image_url_${idx}`] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={load[`image_url_${idx}`]} alt={`Sterile ${idx}`} className="w-32 h-32 object-contain border rounded mb-1 bg-gray-50" />
                   ) : (
                     <div className="w-32 h-32 flex items-center justify-center border rounded bg-gray-100 text-gray-400 mb-1">ไม่มีรูป</div>

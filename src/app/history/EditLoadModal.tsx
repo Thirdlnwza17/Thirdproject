@@ -20,7 +20,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-type ImageSourceType = 'camera' | 'file' | null;
+// ImageSourceType removed - native file inputs and webcam modal are used instead
 
 export default function EditLoadModal({ 
   editForm, 
@@ -52,7 +52,7 @@ export default function EditLoadModal({
   
   // State สำหรับรูป
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
-  const [image2, setImage2] = useState(editForm.image_url_2 || "");
+  // image2 state removed - attest image is tracked on editForm.image_url_2 directly
   
   // State สำหรับจัดการรูปภาพที่กำลังแก้ไข (1=sterile slip, 2=attest)
   const [currentImageIdx, setCurrentImageIdx] = useState<1 | 2 | null>(null);
@@ -65,11 +65,7 @@ export default function EditLoadModal({
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const ocrIntervalRef = useRef<number | null>(null);
-
-  // OCR raw text storage for inspection
-  const [ocrText1, setOcrText1] = useState<string>(editForm._ocr_text_1 || '');
-  const [ocrText2, setOcrText2] = useState<string>(editForm._ocr_text_2 || '');
-  // Note: inspection modal removed per request. Raw OCR text is still stored in form.
+  // Note: inspection modal removed per request. Raw OCR text is stored directly on the form (_ocr_text_1/_ocr_text_2)
 
   const startOcrProgress = () => {
     if (ocrIntervalRef.current) window.clearInterval(ocrIntervalRef.current);
@@ -108,23 +104,25 @@ export default function EditLoadModal({
     setZoomLevel(z => z === 1 ? 2 : 1);
   };
   // Auto-fill staff fields with saved values or user's display name/email
+  // Autofill staff/reader from saved values or current user. Use functional updater to avoid
+  // referencing `editForm` in the dependency array and include `setEditForm` safely.
   useEffect(() => {
-    if (user && editForm) {
-      const savedStaff = localStorage.getItem('sterile_staff');
-      const savedReader = localStorage.getItem('result_reader');
-      const userName = user.displayName || user.email || '';
-      
-      // Only update if the fields are empty and we have values to set
-      if ((!editForm.sterile_staff && (savedStaff || userName)) || 
-          (!editForm.result_reader && (savedReader || userName))) {
-        setEditForm((prev: any) => ({
-          ...prev,
-          sterile_staff: prev.sterile_staff || savedStaff || userName,
-          result_reader: prev.result_reader || savedReader || userName
-        }));
-      }
-    }
-  }, [user]); // Removed editForm and setEditForm from dependencies
+    if (!user) return;
+    const savedStaff = localStorage.getItem('sterile_staff');
+    const savedReader = localStorage.getItem('result_reader');
+    const userName = user.displayName || user.email || '';
+
+    setEditForm((prev: any) => {
+      const needStaff = !prev?.sterile_staff && (savedStaff || userName);
+      const needReader = !prev?.result_reader && (savedReader || userName);
+      if (!needStaff && !needReader) return prev;
+      return {
+        ...prev,
+        sterile_staff: prev.sterile_staff || savedStaff || userName,
+        result_reader: prev.result_reader || savedReader || userName,
+      };
+    });
+  }, [user, setEditForm]);
 
   // Save staff and reader to localStorage when they change
   useEffect(() => {
@@ -214,28 +212,7 @@ export default function EditLoadModal({
     'STERILIE TIME', 'STOP TIME'
   ];
   // ฟังก์ชันสำหรับแปลงวันที่เป็น Date object
-  const parseDate = (year: string, month: string, day: string): Date | null => {
-    const y = parseInt(year, 10);
-    const m = parseInt(month, 10) - 1; // เดือนใน JavaScript เริ่มที่ 0
-    const d = parseInt(day, 10);
-    
-    // แปลงปี 2 หลักเป็น 4 หลัก (ถ้า < 50 เป็น 20xx, ถ้า >= 50 เป็น 19xx)
-    const fullYear = y < 100 ? (y < 50 ? 2000 + y : 1900 + y) : y;
-    
-    const date = new Date(fullYear, m, d);
-    
-    // ตรวจสอบว่าเป็นวันที่ถูกต้อง
-    if (isNaN(date.getTime())) {
-      return null;
-    }
-    
-    // ตรวจสอบว่าวันที่ตรงกับค่าที่ใส่มาหรือไม่
-    if (date.getFullYear() !== fullYear || date.getMonth() !== m || date.getDate() !== d) {
-      return null;
-    }
-    
-    return date;
-  };
+  // parseDate removed (unused)
 
   // ฟังก์ชันดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
   const extractSterilizerInfo = (text: string): string => {
@@ -256,20 +233,29 @@ export default function EditLoadModal({
     // - Model: XXXXX-12345
     // - number of cycle: 12345
     const patterns = [
-      /(?:Total cycle no|cycle NR|number of cycle)[\s:]*([A-Za-z0-9-]+)/i,
-      /Model[\s:]*([A-Za-z0-9-]+)/i,
-      /(?:cycle|no|nr|#)[\s:]*(\d+)/i
+  // allow optional punctuation (.,-) and optional whitespace between label and value
+  /(?:Total\s*cycle\s*no|cycle\s*nr|number\s*of\s*cycle)[\s:\.\-]*([A-Za-z0-9-]+)/i,
+  /Model[\s:\.\-]*([A-Za-z0-9-]+)/i,
+  /(?:cycle|no|nr|#)[\s:\.\-]*([0-9A-Za-z-]+)/i
     ];
     
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
-        // ตรวจสอบว่ามีตัวเลขในผลลัพธ์หรือไม่
-        const numberMatch = match[1].match(/\d+/);
+        const token = match[1].trim();
+        // If token is digits followed by letters (eg. 300a or 300A), prefer the full token
+        // and normalize trailing letters to uppercase (so '300a' -> '300A')
+        const mAlpha = token.match(/^(\d+)([A-Za-z]+)$/);
+        if (mAlpha) {
+          return `${mAlpha[1]}${mAlpha[2].toUpperCase()}`;
+        }
+        // Otherwise, if there are digits, return just the digits
+        const numberMatch = token.match(/\d+/);
         if (numberMatch) {
           return numberMatch[0]; // ส่งคืนเฉพาะตัวเลข
         }
-        return match[1].trim();
+        // Fallback: return the token as-is
+        return token;
       }
     }
     
@@ -520,8 +506,7 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
-          // store raw ocr text for inspection
-          setOcrText1(ocrRaw);
+          // store raw ocr text on the form
           setEditForm((prev: any) => ({ ...prev, _ocr_text_1: ocrRaw }));
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword.toUpperCase()));
@@ -659,8 +644,7 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
-          // store raw ocr text for inspection
-          setOcrText2(ocrRaw);
+          // store raw ocr text on the form
           setEditForm((prev: any) => ({ ...prev, _ocr_text_2: ocrRaw }));
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           console.log('OCR RAW:', ocrRaw); // debug
@@ -675,7 +659,8 @@ export default function EditLoadModal({
               confirmButtonText: 'ตกลง',
               confirmButtonColor: '#3b82f6',
             });
-            setImage2("");
+            // clear attest image on the form when invalid
+            setEditForm((prev: any) => ({ ...prev, image_url_2: "" }));
             return;
           }
           
@@ -777,7 +762,6 @@ export default function EditLoadModal({
     reader.readAsDataURL(file);
   };
   // Add state for Attest OCR extraction
-  const [attestTable, setAttestTable] = useState(editForm.attest_table || Array(10).fill(''));
   const [attestSN, setAttestSN] = useState(editForm.attest_sn || '');
   const [attestTime, setAttestTime] = useState(editForm.attest_time || '');
   // เพิ่ม state สำหรับ drag/offset
@@ -860,24 +844,9 @@ export default function EditLoadModal({
     }
   }, [editForm.program, setEditForm]);
 
-  // Sync image2 state with editForm.image_url_2
-  useEffect(() => {
-    setImage2(editForm.image_url_2 || "");
-  }, [editForm.image_url_2]);
+  // Attest image is tracked directly on editForm.image_url_2; no local state required
 
-  // เพิ่ม click handler สำหรับตาราง Attest
-  const handleAttestClick = (index: number) => {
-    const currentValue = attestTable[index];
-    let newValue = '';
-    if (currentValue === '') newValue = '-';
-    else if (currentValue === '-') newValue = '+';
-    else if (currentValue === '+') newValue = '';
-    
-    const newTable = [...attestTable];
-    newTable[index] = newValue;
-    setAttestTable(newTable);
-    setEditForm((prev: any) => ({ ...prev, attest_table: newTable }));
-  };
+  // attest table interactions removed (unused in current UI); attest values persisted on editForm when set via OCR
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1574,7 +1543,6 @@ export default function EditLoadModal({
                     });
 
                     if (isConfirmed) {
-                      setImage2("");
                       setEditForm((prev: any) => ({ 
                         ...prev, 
                         image_url_2: "",

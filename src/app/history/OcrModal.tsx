@@ -25,6 +25,7 @@ export default function OcrModal({ show, onClose, previewImage, ocrText, ocrLoad
         </button>
         <h2 className="text-xl font-bold mb-2 text-blue-900">Preview & OCR</h2>
         {previewImage && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={previewImage} alt="Preview" className="max-w-full max-h-60 mx-auto mb-4 rounded shadow" />
         )}
         <div className="mb-2">

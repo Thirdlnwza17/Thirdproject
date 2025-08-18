@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFirestore, Timestamp, collection, addDoc } from 'firebase/firestore';
-import { initializeApp, getApps } from 'firebase/app';
-import { auth } from '../../../firebaseConfig'; // ใช้ named import (firebaseConfig ไม่มี default export)
+import { getApps } from 'firebase/app';
 
 // Ensure Firebase is initialized only once
 if (!getApps().length) {

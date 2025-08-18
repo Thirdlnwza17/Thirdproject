@@ -686,9 +686,9 @@ export default function HistoryPage() {
       setPreviewImage(null);
       setOcrText("");
       setLastOcrApiResult(null);
-    } catch (err) {
-      setSaveSuccess("เกิดข้อผิดพลาดในการบันทึก");
-    } finally {
+    } catch {
+        setSaveSuccess("เกิดข้อผิดพลาดในการบันทึก");
+      } finally {
       setSaveLoading(false);
     }
   };
@@ -698,9 +698,7 @@ export default function HistoryPage() {
     await saveOcrEntry();
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  // handleChange removed (not used in this file)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -718,7 +716,7 @@ export default function HistoryPage() {
       // กรอง device_id ออกจาก form ก่อนบันทึก (เฉพาะถ้ามี)
       const formWithoutDeviceId = { ...form };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
-      const docRef = await addDoc(collection(db, "sterilizer_loads"), {
+      await addDoc(collection(db, "sterilizer_loads"), {
         ...formWithoutDeviceId,
         items: filteredItems,
         created_by: user?.email,
@@ -741,71 +739,15 @@ export default function HistoryPage() {
       setShowForm(false);
       setSearch("");
       setActiveTab("manual");
-    } catch (err) {
-      const errorMsg = (err as any)?.message || "เกิดข้อผิดพลาด";
-      setErrorMsg(errorMsg);
+    } catch {
+      setErrorMsg("เกิดข้อผิดพลาด");
     } finally {
       setSubmitting(false);
     }
   };
 
   // Mouse events
-  const handleOcrMouseDown = (e: React.MouseEvent) => {
-    setOcrDragging(true);
-    ocrDragStart.current = { x: e.clientX, y: e.clientY };
-    ocrOffsetStart.current = { ...ocrOffset };
-  };
-  const handleOcrMouseUp = () => setOcrDragging(false);
-  const handleOcrMouseMove = (e: React.MouseEvent) => {
-    if (!ocrDragging) return;
-    setOcrOffset({
-      x: ocrOffsetStart.current.x + (e.clientX - ocrDragStart.current.x),
-      y: ocrOffsetStart.current.y + (e.clientY - ocrDragStart.current.y),
-    });
-  };
-  const handleOcrWheel = (e: React.WheelEvent) => {
-    setOcrZoom(z => Math.max(0.5, Math.min(5, z + (e.deltaY < 0 ? 0.1 : -0.1))));
-  };
-
-  // Touch events
-  const handleOcrTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setOcrDragging(true);
-      const touch = e.touches[0];
-      ocrDragStart.current = { x: touch.clientX, y: touch.clientY };
-      ocrOffsetStart.current = { ...ocrOffset };
-    } else if (e.touches.length === 2) {
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      const distance = Math.sqrt(
-        Math.pow(touch2.clientX - touch1.clientX, 2) +
-        Math.pow(touch2.clientY - touch1.clientY, 2)
-      );
-      ocrTouchStart.current = { x: 0, y: 0, distance };
-    }
-  };
-  const handleOcrTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && ocrDragging) {
-      const touch = e.touches[0];
-      setOcrOffset({
-        x: ocrOffsetStart.current.x + (touch.clientX - ocrDragStart.current.x),
-        y: ocrOffsetStart.current.y + (touch.clientY - ocrDragStart.current.y),
-      });
-    } else if (e.touches.length === 2) {
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      const distance = Math.sqrt(
-        Math.pow(touch2.clientX - touch1.clientX, 2) +
-        Math.pow(touch2.clientY - touch1.clientY, 2)
-      );
-      if (ocrTouchStart.current.distance > 0) {
-        const scale = distance / ocrTouchStart.current.distance;
-        setOcrZoom(z => Math.max(0.5, Math.min(5, z * scale)));
-      }
-      ocrTouchStart.current = { ...ocrTouchStart.current, distance };
-    }
-  };
-  const handleOcrTouchEnd = () => setOcrDragging(false);
+  // OCR drag/zoom handlers removed (not used in current UI)
 
   // Reset zoom/offset when modal opens/closes
   useEffect(() => {

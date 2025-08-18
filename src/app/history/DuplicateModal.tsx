@@ -34,7 +34,7 @@ export default function DuplicateModal({ show, onClose, duplicateType, duplicate
           <div className="mt-3 text-sm text-gray-600">
             <p>ข้อมูลที่ซ้ำ:</p>
             <ul className="list-disc list-inside mt-2">
-              {duplicateEntries.slice(0, 3).map((entry, index) => (
+              {duplicateEntries.slice(0, 3).map((entry) => (
                 <li key={entry.id}>
                   {entry.created_at && entry.created_at.toDate ? 
                     entry.created_at.toDate().toLocaleString() : "-"} 

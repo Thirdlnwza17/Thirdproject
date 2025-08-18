@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -11,16 +11,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // สุ่มค่าหลัง mount (client only)
-    const arr = Array.from({ length: 30 }).map(() => ({
-      width: Math.random() * 16 + 8,
-      height: Math.random() * 16 + 8,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      background: ["#f472b6", "#a78bfa", "#38bdf8", "#facc15"][Math.floor(Math.random() * 4)],
-      animationDuration: (Math.random() * 8 + 6) + "s",
-    }));
-    // setParticles(arr); // This line was removed as per the edit hint.
+    // kept intentionally empty (previous particle code removed)
   }, []);
 
   useEffect(() => {
