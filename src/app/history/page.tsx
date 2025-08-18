@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import Swal from 'sweetalert2';
 import { auth } from "../../firebaseConfig";
-import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs, setDoc } from "firebase/firestore";
+import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs } from "firebase/firestore";
 import Link from "next/link";
 
 import SterilizerLoadsCardView from './SterilizerLoadsCardView';
@@ -41,27 +41,13 @@ const SLIP_KEYWORDS = [
   'BAUMER', 'PROGRAM', 'TEMPERATURE', 'STERILIZATION TIME', 'VACUUM PULSE', 'DRYING TIME', 'END OF CYCLE', 'OPER'
 ];
 
-import { 
-  subscribeSterilizerEntries,
-  subscribeOcrEntries,
-  addSterilizerEntry,
-  updateSterilizerEntry,
-  deleteSterilizerEntry,
-  logAction,
-  checkOcrDuplicate,
-  SterilizerEntry,
-  getUserRole
-} from "@/dbService";
+import { SterilizerEntry } from "@/dbService";
 
 export default function HistoryPage() {
   // ...
   const [clearAllFiltersTrigger, setClearAllFiltersTrigger] = useState(0);
-  // Generate year options (current year - 50 to current year + 10)
+  // Current year for date calculations
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 61 }, (_, i) => (currentYear - 50 + i).toString());
-  
-  // Generate month options (1-12)
-  const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
   
   // Function to get days in a month
   const getDaysInMonth = (year: string, month: string): string[] => {

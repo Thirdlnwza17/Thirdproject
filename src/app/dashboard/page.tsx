@@ -8,11 +8,10 @@ import Link from "next/link";
 import Image from 'next/image';
 import { getUserRole, subscribeToSterilizerLoads } from "@/dbService";
 
-import { STATUS_OPTIONS, MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS, PROGRAM_FILTERS, ALL_FILTERS, INDICATOR_FILTERS } from "./constants";
+import { STATUS_OPTIONS, MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
 import ProgramAnalyticsChart, { ProgramAnalyticsData } from "./ProgramAnalyticsChart";
 import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry } from "./analyticsService";
 
-// สำหรับ type ของ checkboxResults
 interface CheckboxResults {
   chemical_external?: boolean;
   chemical_internal?: boolean;
@@ -20,11 +19,6 @@ interface CheckboxResults {
   biological?: boolean;
   [key: string]: any;
 }
-
-const initialForm = {
-  status: STATUS_OPTIONS[0],
-  phases: []
-};
 
 
 function normalizeStatus(status: any): "PASS" | "FAIL" | "CANCEL" {
@@ -50,10 +44,6 @@ function getEntryStatus(data: any): "PASS" | "FAIL" | "CANCEL" {
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(initialForm);
-  const [submitting, setSubmitting] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   // กำหนด interface สำหรับผลการตรวจสอบแต่ละตัว (Indicator)
   interface CheckboxResults {
@@ -82,8 +72,6 @@ export default function DashboardPage() {
   const [entries, setEntries] = useState<DashboardEntry[]>([]);
   const [role, setRole] = useState<string>("");
   const router = useRouter();
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<SterilizerEntry | null>(null);
   const unsubEntriesRef = useRef<null | (() => void)>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [entriesPerPage] = useState(10);
