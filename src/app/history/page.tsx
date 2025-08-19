@@ -760,11 +760,13 @@ export default function HistoryPage() {
       <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl">
         <div className="w-full flex flex-col sm:flex-row gap-3 items-center justify-between mb-3">
           <div className="flex items-center gap-4">
-            <img 
-              src="/ram-logo.jpg" 
-              alt="RAM Hospital" 
-              className="w-33 h-22 object-contain"
-            />
+            <Link href="/dashboard">
+              <img 
+                src="/ram-logo.jpg" 
+                alt="RAM Hospital" 
+                className="w-33 h-22 object-contain hover:opacity-90 transition-opacity cursor-pointer"
+              />
+            </Link>
             <h1 className="text-2xl font-extrabold text-center drop-shadow">
               <span className="text-sky-400">ประวัติการบันทึก</span>{' '}
               <span className="text-blue-700">Sterilizer</span>

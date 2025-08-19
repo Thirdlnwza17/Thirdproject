@@ -64,7 +64,6 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string>("");
   const router = useRouter();
   const unsubEntriesRef = useRef<null | (() => void)>(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [entriesPerPage] = useState(10);
   const [selectedProgram] = useState<string>("ALL");
   const [selectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
@@ -92,8 +91,6 @@ export default function DashboardPage() {
     const [yyyy, mm, dd] = parts;
     return `${yyyy}/${mm}/${dd}`;
   };
-  // Checkbox types
-  type CheckboxType = 'mechanical' | 'chemical_external' | 'chemical_internal';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -180,10 +177,7 @@ export default function DashboardPage() {
     return false;
   });
 
-  // Calculate pagination
-  const indexOfLastEntry = currentPage * entriesPerPage;
-  const indexOfFirstEntry = indexOfLastEntry - entriesPerPage;
-  const totalPages = Math.ceil(recentEntries.length / entriesPerPage);
+  // Pagination removed as it wasn't being used in the UI
 
   const handleLogout = async () => {
     if (unsubEntriesRef.current) unsubEntriesRef.current();
@@ -339,7 +333,9 @@ export default function DashboardPage() {
         {/* Header section: logo left, title right */}
         <div className="w-full flex flex-row items-center mb-4">
           <div className="w-40 h-40 relative mr-4">
-            <Image src="/ram-logo.jpg" alt="Sterilizer Logo" fill className="object-contain drop-shadow-xl bg-white rounded-2xl p-2" />
+            <Link href="/history">
+              <Image src="/ram-logo.jpg" alt="Sterilizer Logo" fill className="object-contain drop-shadow-xl bg-white rounded-2xl p-2 hover:opacity-90 transition-opacity cursor-pointer" />
+            </Link>
           </div>
           <div className="flex flex-col justify-center">
             <h1 className="text-2xl md:text-3xl font-bold mb-2 drop-shadow text-center">

@@ -2,18 +2,15 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { signInWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from "../../firebaseConfig";
-import { getFirestore, setDoc, doc, getDoc, Timestamp, collection, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { 
+  UserData, 
+  fetchAllUsers, 
+  loginUser, 
+  onAuthStateChanged as onAuthStateChangedService 
+} from "@/dbService";
 
-interface UserData {
-  id: string;
-  email: string;
-  fullName: string;
-  role: string;
-}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,24 +23,16 @@ export default function LoginPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const loadUsers = async () => {
       try {
-        const db = getFirestore();
-        const usersRef = collection(db, "users");
-        const querySnapshot = await getDocs(usersRef);
-        const usersList = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          email: doc.data().email,
-          fullName: doc.data().fullName || doc.data().displayName || 'No Name',
-          role: doc.data().role || 'operator'
-        }));
+        const usersList = await fetchAllUsers();
         setUsers(usersList);
       } catch (err) {
         console.error("Error fetching users:", err);
       }
     };
 
-    fetchUsers();
+    loadUsers();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,33 +52,9 @@ export default function LoginPage() {
         throw new Error("ไม่พบข้อมูลผู้ใช้ที่เลือก");
       }
       
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Update the user's display name in Firebase Auth
-      await updateProfile(user, {
-        displayName: selectedUserData.fullName.trim()
-      });
-
-      // Save user info to Firestore
-      const db = getFirestore();
-      const userRef = doc(db, "users", user.uid);
-
-      // ดึงข้อมูล user เดิม
-      const userSnap = await getDoc(userRef);
-      let role = "operator";
-      if (userSnap.exists() && userSnap.data().role) {
-        role = userSnap.data().role;
-      }
-
-      await setDoc(userRef, {
-        email: user.email,
-        fullName: selectedUserData.fullName.trim(),
-        lastLogin: Timestamp.now(),
-        role,
-      }, { merge: true });
-
-      setSuccess("Login successful!");
+      const { role } = await loginUser(email, password, selectedUserData);
+      
+      setSuccess("เข้าสู่ระบบสำเร็จ!");
       if (role === "admin") {
         router.replace("/dashboard");
       } else {
