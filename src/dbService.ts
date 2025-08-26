@@ -1,5 +1,5 @@
 // dbService.ts
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc, limit } from 'firebase/firestore';
 import { signInWithEmailAndPassword, updateProfile, User as FirebaseUser, onAuthStateChanged as firebaseAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
@@ -11,6 +11,29 @@ export interface UserData {
   role: string;
   displayName?: string;
   lastLogin?: { toDate: () => Date };
+}
+
+export type AuditLogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_ATTEMPT';
+
+export interface AuditLogEntry {
+  id?: string;
+  action: AuditLogAction;
+  entityType: string;
+  entityId: string;
+  userId: string;
+  userEmail: string;
+  userRole: string;
+  timestamp: Date;
+  details: {
+    field?: string;
+    oldValue?: any;
+    newValue?: any;
+    message?: string;
+    ip?: string;
+    userAgent?: string;
+    error?: string;
+    [key: string]: any; // Allow additional properties
+  };
 }
 
 // Base interface for Firestore document data
@@ -53,13 +76,29 @@ export function getColByProgram(program: string): string | null {
 }
 
 // CREATE
-export async function createLog(program: string, data: SterilizerEntry) {
+export async function createLog(program: string, data: SterilizerEntry, userId: string = '', userEmail: string = 'system', userRole: string = 'system') {
   const col = getColByProgram(program);
   if (!col) throw new Error('Invalid program type');
+  
   const docRef = await addDoc(collection(db, col), {
     ...data,
     created_at: data.created_at || Timestamp.now(),
   });
+  
+  // Log the creation
+  await logAuditAction(
+    'CREATE',
+    col,
+    docRef.id,
+    userId,
+    userEmail,
+    userRole,
+    {
+      message: `สร้างรายการใหม่ใน ${program}`,
+      newValue: data
+    }
+  );
+  
   return docRef.id;
 }
 
@@ -77,17 +116,72 @@ export async function getLog(col: string, id: string) {
 }
 
 // UPDATE
-export async function updateLog(program: string, id: string, data: SterilizerEntry) {
+export async function updateLog(program: string, id: string, data: SterilizerEntry, userId: string = '', userEmail: string = 'system', userRole: string = 'system') {
   const col = getColByProgram(program);
   if (!col) throw new Error('Invalid program type');
-  await updateDoc(doc(db, col, id), data);
+  
+  // Get the current document before updating
+  const docRef = doc(db, col, id);
+  const docSnap = await getDoc(docRef);
+  const beforeData = docSnap.exists() ? docSnap.data() : null;
+  
+  // Update the document
+  await updateDoc(docRef, data);
+  
+  // Find changed fields
+  const changes: Record<string, { oldValue: any; newValue: any }> = {};
+  if (beforeData) {
+    Object.keys(data).forEach(key => {
+      if (JSON.stringify(beforeData[key]) !== JSON.stringify(data[key as keyof SterilizerEntry])) {
+        changes[key] = {
+          oldValue: beforeData[key],
+          newValue: data[key as keyof SterilizerEntry]
+        };
+      }
+    });
+  }
+  
+  // Log the update
+  await logAuditAction(
+    'UPDATE',
+    col,
+    id,
+    userId,
+    userEmail,
+    userRole,
+    {
+      message: `อัปเดตรายการใน ${program}`,
+      ...changes
+    }
+  );
 }
 
 // DELETE
-export async function deleteLog(program: string, id: string) {
+export async function deleteLog(program: string, id: string, userId: string = '', userEmail: string = 'system', userRole: string = 'system') {
   const col = getColByProgram(program);
   if (!col) throw new Error('Invalid program type');
-  await deleteDoc(doc(db, col, id));
+  
+  // Get the document before deleting
+  const docRef = doc(db, col, id);
+  const docSnap = await getDoc(docRef);
+  const beforeData = docSnap.exists() ? docSnap.data() : null;
+  
+  // Delete the document
+  await deleteDoc(docRef);
+  
+  // Log the deletion
+  await logAuditAction(
+    'DELETE',
+    col,
+    id,
+    userId,
+    userEmail,
+    userRole,
+    {
+      message: `ลบรายการจาก ${program}`,
+      oldValue: beforeData
+    }
+  );
 }
 
 // Utility: get all logs from all collections (for All filter)
@@ -209,53 +303,68 @@ export async function loginUser(email: string, password: string, selectedUserDat
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-
-    // Update the user's display name in Firebase Auth
-    await updateProfile(user, {
-      displayName: selectedUserData.fullName.trim()
-    });
-
-    // Save/update user info in Firestore
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
+    const role = selectedUserData.role || 'operator';
     
-    let role = 'operator';
-    if (userSnap.exists() && userSnap.data()?.role) {
-      role = userSnap.data()?.role;
-    }
-
-    await setDoc(
-      userRef,
+    // Update user's last login time
+    await updateProfile(user, {
+      displayName: selectedUserData.fullName
+    });
+    
+    // Update last login time in Firestore
+    const userDocRef = doc(db, 'users', selectedUserData.id);
+    await updateDoc(userDocRef, {
+      lastLogin: Timestamp.now()
+    });
+    
+    // Log the login
+    await logAuditAction(
+      'LOGIN',
+      'users',
+      selectedUserData.id,
+      selectedUserData.id,
+      selectedUserData.email,
+      role,
       {
-        email: user.email,
-        fullName: selectedUserData.fullName.trim(),
-        lastLogin: Timestamp.now(),
-        role,
-      },
-      { merge: true }
+        message: 'เข้าสู่ระบบ',
+        newValue: {
+          lastLogin: new Date().toISOString()
+        }
+      }
     );
-
-    return { role };
-  } catch (error) {
+    
+    return { user, role };
+  } catch (error: any) {
     console.error('Login error:', error);
-    throw error;
-  }
-}
-
-export function onAuthStateChanged(callback: (user: FirebaseUser | null) => void) {
-  return firebaseAuthStateChanged(auth, callback);
+    throw new Error(error.message || 'Login failed');
+  }  
 }
 
 export function getCurrentUser() {
   return auth.currentUser;
 }
 
-export async function signOutUser() {
+export async function signOutUser(userId: string = '', userEmail: string = 'system', userRole: string = 'system') {
   try {
+    // Log the logout before signing out
+    if (userId && userEmail !== 'system') {
+      await logAuditAction(
+        'LOGOUT',
+        'users',
+        userId,
+        userId,
+        userEmail,
+        userRole,
+        {
+          message: 'ออกจากระบบ'
+        }
+      );
+    }
+    
     await auth.signOut();
+    return { success: true };
   } catch (error) {
-    console.error('Sign out error:', error);
-    throw error;
+    console.error('Error signing out:', error);
+    return { success: false, error };
   }
 }
 
@@ -269,17 +378,86 @@ export async function deleteOcrEntry(id: string) {
   return await deleteDoc(doc(db, "sterilizer_ocr_entries", id));
 }
 
-// Log action (edit/delete)
-export async function logAction(action: string, entryId: string, before: SterilizerEntry, after: SterilizerEntry, user: string, role: string) {
-  return await addDoc(collection(db, "sterilizer_action_logs"), {
-    action,
-    entry_id: entryId,
-    by: user,
-    role,
-    at: Timestamp.now(),
-    before,
-    after,
+// Log action to audit log
+export async function logAuditAction(
+  action: AuditLogAction,
+  entityType: string,
+  entityId: string,
+  userId: string,
+  userEmail: string,
+  userRole: string,
+  details: {
+    field?: string;
+    oldValue?: any;
+    newValue?: any;
+    message?: string;
+    ip?: string;
+    userAgent?: string;
+    error?: string;
+    [key: string]: any;
+  }
+): Promise<void> {
+  try {
+    await addDoc(collection(db, 'audit_logs'), {
+      action,
+      entityType,
+      entityId,
+      userId,
+      userEmail,
+      userRole,
+      timestamp: Timestamp.now(),
+      details,
+    });
+  } catch (error) {
+    console.error('Error logging audit action:', error);
+  }
+}
+
+// Get all audit logs
+export async function getAuditLogs(limitCount = 100): Promise<AuditLogEntry[]> {
+  try {
+    const q = query(
+      collection(db, 'audit_logs'),
+      orderBy('timestamp', 'desc'),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp.toDate()
+    } as AuditLogEntry));
+  } catch (error) {
+    console.error('Error getting audit logs:', error);
+    throw error;
+  }
+}
+
+// Subscribe to audit log changes
+export function subscribeToAuditLogs(
+  callback: (logs: AuditLogEntry[]) => void,
+  limitCount = 100
+): () => void {
+  const q = query(
+    collection(db, 'audit_logs'),
+    orderBy('timestamp', 'desc'),
+    limit(limitCount)
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const logs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp.toDate()
+    } as AuditLogEntry));
+    
+    callback(logs);
+  }, (error) => {
+    console.error('Error subscribing to audit logs:', error);
   });
+
+  return unsubscribe;
 }
 
 // Check for duplicate OCR entry

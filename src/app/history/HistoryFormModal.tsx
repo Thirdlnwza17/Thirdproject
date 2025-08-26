@@ -23,7 +23,6 @@ export interface FormData {
   // Staff and other info
   sterile_staff?: string;
   result_reader?: string;
-  printed_out_type?: string;
   
   // Items array
   items?: Array<{ name: string; quantity: string | number }>;
@@ -129,8 +128,7 @@ export default function HistoryFormModal({
         prevac: true,
         c134c: true,
         s9: true,
-        d20: true,
-        printed_out_type: 'Autoclave',
+        d20: true
       }));
     } else if (form.program === 'EO') {
       setForm((prev: FormData) => ({
@@ -138,8 +136,7 @@ export default function HistoryFormModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: 'EO',
+        d20: false
       }));
     } else if (form.program === 'Plasma') {
       setForm((prev: FormData) => ({
@@ -147,8 +144,7 @@ export default function HistoryFormModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: 'Plasma',
+        d20: false
       }));
     } else if (form.program) {
       setForm((prev: FormData) => ({
@@ -156,8 +152,7 @@ export default function HistoryFormModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: '',
+        d20: false
       }));
     }
   }, [form.program, setForm]);

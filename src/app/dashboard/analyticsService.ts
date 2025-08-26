@@ -131,13 +131,8 @@ export function calculateProgramAnalytics(
         } else if (typeof td === 'string' && td.trim() !== '') {
           num = parseFloat(td);
         }
-        // ตรวจสอบชื่อโปรแกรม EO (case-insensitive)
-        const progName = (entry.program_name || entry.program || '').toString().toUpperCase();
-        if (progName === 'EO') {
-          timeInMinutes = num * 60; // แปลงชั่วโมงเป็นนาที
-        } else {
-          timeInMinutes = num; // โปรแกรมอื่นถือเป็นนาที
-        }
+        // ใช้ค่าเวลาตามที่บันทึกไว้ ไม่ต้องแปลง
+        timeInMinutes = num;
       }
       
       return sum + timeInMinutes;

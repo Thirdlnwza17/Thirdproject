@@ -3,8 +3,9 @@ import React, { useRef, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
 import { User } from 'firebase/auth';
-import { collection, getDocs, getFirestore } from 'firebase/firestore';
+import { collection, getDocs, getFirestore, doc, getDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
+import { logAuditAction } from '@/dbService';
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -65,7 +66,6 @@ export default function EditLoadModal({
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const ocrIntervalRef = useRef<number | null>(null);
-  // Note: inspection modal removed per request. Raw OCR text is stored directly on the form (_ocr_text_1/_ocr_text_2)
 
   const startOcrProgress = () => {
     if (ocrIntervalRef.current) window.clearInterval(ocrIntervalRef.current);
@@ -194,15 +194,14 @@ export default function EditLoadModal({
     } else {
       newForm[name] = value;
     }
-    // ถ้าเลือกโปรแกรมเป็น PREVAC หรือ BOWIE ให้ติ๊ก checkbox และ set printed_out_type
+    // ถ้าเลือกโปรแกรมเป็น PREVAC หรือ BOWIE ให้ติ๊ก checkbox
     if (name === 'program' && (value === 'PREVAC' || value === 'BOWIE')) {
       newForm = {
         ...newForm,
         prevac: true,
         c134c: true,
         s9: true,
-        d20: true,
-        printed_out_type: 'Autoclave',
+        d20: true
       };
     }
     setEditForm(newForm);
@@ -506,8 +505,7 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
-          // store raw ocr text on the form
-          setEditForm((prev: any) => ({ ...prev, _ocr_text_1: ocrRaw }));
+          // Process OCR text without storing raw text
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword.toUpperCase()));
           if (!isSlip) {
@@ -644,8 +642,7 @@ export default function EditLoadModal({
           }
           const data = await response.json();
           let ocrRaw = data.text || '';
-          // store raw ocr text on the form
-          setEditForm((prev: any) => ({ ...prev, _ocr_text_2: ocrRaw }));
+          // Process OCR text without storing raw text
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           console.log('OCR RAW:', ocrRaw); // debug
 
@@ -664,17 +661,16 @@ export default function EditLoadModal({
             return;
           }
           
-          // ตรวจสอบผล BI จาก OCR และตรวจสอบสติ๊กเกอร์ 3M
+          // ตรวจสอบผล BI จาก OCR
           let biResult = '';
-          const lowerOcr = ocrRaw.toLowerCase();
-          const has3MSticker = ocrRaw.includes('3M') || lowerOcr.includes('3m');
+          const hasPlusSymbol = ocrRaw.includes('+');
           
-          if (has3MSticker) {
-            biResult = 'ผ่าน';
-          } else if (lowerOcr.includes('accept') || lowerOcr.includes('pass') || lowerOcr.includes('ผ่าน')) {
-            biResult = 'ผ่าน';
-          } else if (lowerOcr.includes('reject') || lowerOcr.includes('fail') || lowerOcr.includes('ไม่ผ่าน')) {
+          if (hasPlusSymbol) {
+            // ถ้าพบเครื่องหมาย + ให้ตั้งค่าเป็นไม่ผ่าน
             biResult = 'ไม่ผ่าน';
+          } else {
+            // ถ้าไม่พบ + ให้ตั้งค่าเป็นผ่าน
+            biResult = 'ผ่าน';
           }
 
           // ดึงข้อมูลจาก OCR
@@ -710,22 +706,19 @@ export default function EditLoadModal({
             attest_time: time
           };
           
-          // อัปเดตผล BI และตรวจสอบ 3M sticker
+          // อัปเดตผล BI
           const alertMessages = [];
           
-          if (has3MSticker) {
-            // ตรวจพบสติ๊กเกอร์ 3M ให้ติ๊กผ่านทั้งหมด
-            updates.bio_test = 'ผ่าน';
-            updates.chemical_external = 'ผ่าน';
-            updates.chemical_internal = 'ผ่าน';
-            updates.mechanical = 'ผ่าน';
-            
-            alertMessages.push('ตรวจพบสติ๊กเกอร์ 3M: ตั้งค่าผลตรวจสอบทั้งหมดเป็น "ผ่าน"');
-          } else if (biResult) {
-            // กรณีปกติที่ตรวจพบผล BI
-            updates.bio_test = biResult;
-          }
+          // ตั้งค่าผลตรวจสอบ BI
+          updates.bi = biResult;
+          updates.bio_test = biResult; // Auto-set the bio_test field based on OCR result
           
+          // เพิ่มข้อความแจ้งเตือนผลการตรวจสอบ
+          if (hasPlusSymbol) {
+            alertMessages.push('ผลตรวจสอบชีวภาพ: ตรวจพบเครื่องหมาย + ตั้งค่าเป็น "ไม่ผ่าน"');
+          } else {
+            alertMessages.push('ผลตรวจสอบชีวภาพ: ไม่พบเครื่องหมาย + ตั้งค่าเป็น "ผ่าน"');
+          }
           // ถ้าเจอวันที่จาก Attest OCR ให้อัปเดตฟอร์ม
           if (attestDate) {
             setDate(attestDate);
@@ -734,10 +727,8 @@ export default function EditLoadModal({
             // แจ้งเตือนเมื่อพบข้อมูล
             let alertMessage = `ตั้งค่าวันที่จาก Attest: ${attestDate}`;
             
-            // เพิ่มข้อความผล BI และ 3M ถ้ามี
-            if (has3MSticker) {
-              alertMessage += `\n${alertMessages.join('\n')}`;
-            } else if (biResult) {
+            // เพิ่มข้อความผล BI ถ้ามี
+            if (biResult) {
               alertMessage += `\nตรวจพบผลตรวจสอบ BI: ${biResult}`;
             }
             
@@ -811,8 +802,7 @@ export default function EditLoadModal({
         prevac: true,
         c134c: true,
         s9: true,
-        d20: true,
-        printed_out_type: 'Autoclave',
+        d20: true
       }));
     } else if (editForm.program === 'EO') {
       setEditForm((prev: any) => ({
@@ -820,8 +810,7 @@ export default function EditLoadModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: 'EO',
+        d20: false
       }));
     } else if (editForm.program === 'Plasma') {
       setEditForm((prev: any) => ({
@@ -829,8 +818,7 @@ export default function EditLoadModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: 'Plasma',
+        d20: false
       }));
     } else if (editForm.program) {
       setEditForm((prev: any) => ({
@@ -838,8 +826,7 @@ export default function EditLoadModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false,
-        printed_out_type: '',
+        d20: false
       }));
     }
   }, [editForm.program, setEditForm]);
@@ -886,6 +873,61 @@ export default function EditLoadModal({
       // Clear bio_test if no attest image is present
       if (!formData.image_url_2) {
         formData.bio_test = '';
+      }
+
+      // ดึงข้อมูลเดิมก่อนอัปเดต
+      const db = getFirestore();
+      const docRef = doc(db, 'sterilizer_loads', formData.id);
+      const docSnap = await getDoc(docRef);
+      const beforeData = docSnap.exists() ? docSnap.data() : {};
+      
+      // ตรวจสอบการเปลี่ยนแปลง
+      const changedFields: Record<string, { oldValue: any, newValue: any }> = {};
+      
+      // ตรวจสอบทุกฟิลด์ที่มีการเปลี่ยนแปลง
+      Object.keys(formData).forEach(key => {
+        if (JSON.stringify(formData[key]) !== JSON.stringify(beforeData[key])) {
+          changedFields[key] = {
+            oldValue: beforeData[key],
+            newValue: formData[key]
+          };
+        }
+      });
+      
+      // บันทึก audit log ถ้ามีการเปลี่ยนแปลง
+      if (Object.keys(changedFields).length > 0 && user) {
+        try {
+          // สร้าง object สำหรับเก็บเฉพาะข้อมูลที่ต้องการบันทึก
+          const safeChanges: Record<string, { oldValue: any, newValue: any }> = {};
+          
+          // ตรวจสอบและกรองข้อมูลที่จะบันทึก
+          Object.entries(changedFields).forEach(([key, value]) => {
+            // ตรวจสอบว่าไม่ใช่ฟิลด์ที่อาจมีค่า undefined หรือไม่สามารถบันทึกลง Firestore ได้
+            if (key !== 'id' && value !== undefined) {
+              safeChanges[key] = {
+                oldValue: typeof value.oldValue === 'object' ? '[...]' : value.oldValue,
+                newValue: typeof value.newValue === 'object' ? '[...]' : value.newValue
+              };
+            }
+          });
+
+          await logAuditAction(
+            'UPDATE',
+            'sterilizer_loads',
+            formData.id,
+            user.uid,
+            user.email || 'unknown',
+            (user as any)?.role || 'user',
+            {
+              message: 'อัปเดตข้อมูลการนึ่งฆ่าเชื้อ' + (changedFields.notes ? ' (แก้ไขหมายเหตุ)' : ''),
+              changed_fields: Object.keys(safeChanges),
+              changes: safeChanges
+            }
+          );
+        } catch (error) {
+          console.error('Error saving audit log:', error);
+          // ยังคงบันทึกข้อมูลแม้บันทึก audit log ไม่สำเร็จ
+        }
       }
       
       await Promise.resolve(onSave(formData));
@@ -1215,19 +1257,73 @@ export default function EditLoadModal({
             )}
             <div className="font-bold mt-2 text-black">ผลการตรวจสอบประสิทธิภาพการทำลายเชื้อ</div>
             <div className="ml-2 text-black">กลไก:
-              <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ผ่าน" checked={editForm?.mechanical === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-              <label className="ml-2 text-black"><input type="radio" name="mechanical" value="ไม่ผ่าน" checked={editForm?.mechanical === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="mechanical" 
+                  value="ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.mechanical === 'ผ่าน' : false} 
+                  onChange={handleChange} 
+                  disabled={!editForm?.image_url_1}
+                /> ผ่าน
+              </label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="mechanical" 
+                  value="ไม่ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.mechanical === 'ไม่ผ่าน' : false} 
+                  onChange={handleChange}
+                  disabled={!editForm?.image_url_1}
+                /> ไม่ผ่าน
+              </label>
             </div>
             <div className="ml-2 text-black">เทปเคมีภายนอก:
-              <label className="ml-2 text-black"><input type="radio" name="chemical_external" value="ผ่าน" checked={editForm?.chemical_external === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-              <label className="ml-2 text-black"><input type="radio" name="chemical_external" value="ไม่ผ่าน" checked={editForm?.chemical_external === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="chemical_external" 
+                  value="ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.chemical_external === 'ผ่าน' : false} 
+                  onChange={handleChange} 
+                  disabled={!editForm?.image_url_1}
+                /> ผ่าน
+              </label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="chemical_external" 
+                  value="ไม่ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.chemical_external === 'ไม่ผ่าน' : false} 
+                  onChange={handleChange}
+                  disabled={!editForm?.image_url_1}
+                /> ไม่ผ่าน
+              </label>
             </div>
             <div className="ml-2 text-black">เทปเคมีภายใน:
-              <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ผ่าน" checked={editForm?.chemical_internal === 'ผ่าน'} onChange={handleChange} required /> ผ่าน</label>
-              <label className="ml-2 text-black"><input type="radio" name="chemical_internal" value="ไม่ผ่าน" checked={editForm?.chemical_internal === 'ไม่ผ่าน'} onChange={handleChange} /> ไม่ผ่าน</label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="chemical_internal" 
+                  value="ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.chemical_internal === 'ผ่าน' : false} 
+                  onChange={handleChange} 
+                  disabled={!editForm?.image_url_1}
+                /> ผ่าน
+              </label>
+              <label className="ml-2 text-black">
+                <input 
+                  type="radio" 
+                  name="chemical_internal" 
+                  value="ไม่ผ่าน" 
+                  checked={editForm?.image_url_1 ? editForm?.chemical_internal === 'ไม่ผ่าน' : false} 
+                  onChange={handleChange}
+                  disabled={!editForm?.image_url_1}
+                /> ไม่ผ่าน
+              </label>
             </div>
 
-            <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ (เฉพาะรอบที่ใช้ทดสอบ)</div>
+            <div className="font-bold mt-2 text-black">ตัวเชื้อทดสอบชีวภาพ </div>
             <div className="ml-2 text-black">ผล:
               <label className="ml-2 text-black">
                 <input 
@@ -1249,9 +1345,6 @@ export default function EditLoadModal({
                   disabled={!editForm?.image_url_2} // Disable if no attest image
                 /> ไม่ผ่าน
               </label>
-              {!editForm?.image_url_2 && (
-                <p className="text-sm text-gray-500 mt-1">กรุณาอัปโหลดรูป Attest เพื่อเปิดใช้งานการบันทึกผล BI</p>
-              )}
             </div>
             <div className="font-bold mt-2 text-black">
               <div>เจ้าหน้าที่ Sterile</div>
@@ -1473,7 +1566,6 @@ export default function EditLoadModal({
                         image_url_1: "",
                         // Clear autofilled data from sterile slip
                         sterilizer_number: "",
-                        cycle_number: "",
                         total_duration: ""
                       }));
                       Swal.fire({
@@ -1543,6 +1635,32 @@ export default function EditLoadModal({
                     });
 
                     if (isConfirmed) {
+                      try {
+                        // บันทึก audit log ก่อนลบรูปภาพ
+                        if (user) {
+                          await logAuditAction(
+                            'UPDATE',
+                            'sterilizer_loads',
+                            editForm.id,
+                            user.uid,
+                            user.email || 'unknown',
+                            (user as any)?.role || 'user',
+                            {
+                              message: 'ลบรูปภาพ Attest',
+                              changed_fields: ['image_url_2', 'attest_sn', 'attest_time', 'bio_test'],
+                              changes: {
+                                image_url_2: { oldValue: editForm.image_url_2, newValue: '' },
+                                attest_sn: { oldValue: editForm.attest_sn, newValue: '' },
+                                attest_time: { oldValue: editForm.attest_time, newValue: '' },
+                                bio_test: { oldValue: editForm.bio_test, newValue: '' }
+                              }
+                            }
+                          );
+                        }
+                      } catch (error) {
+                        console.error('Error saving audit log:', error);
+                      }
+                      
                       setEditForm((prev: any) => ({ 
                         ...prev, 
                         image_url_2: "",

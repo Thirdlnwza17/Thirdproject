@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, User } from "firebase/auth";
-import Swal from 'sweetalert2';
+import Image from 'next/image';
+import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
-import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs } from "firebase/firestore";
+import { logAuditAction } from "@/dbService";
+import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import Link from "next/link";
+import Swal from 'sweetalert2';
 
 import SterilizerLoadsCardView from './SterilizerLoadsCardView';
 import OcrModal from './OcrModal';
@@ -14,6 +16,80 @@ import ImageModal from './ImageModal';
 import HistoryFormModal from './HistoryFormModal';
 import EditLoadModal from './EditLoadModal';
 import DuplicateModal from './DuplicateModal';
+
+// User dropdown component
+const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full px-4 py-2 font-semibold shadow transition-colors"
+      >
+        <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-purple-300">
+          <Image 
+            src="/Instigator.jpg" 
+            alt="User" 
+            width={32} 
+            height={32}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <span className="truncate max-w-[120px]">{user?.displayName || user?.email?.split('@')[0]}</span>
+        <svg
+          className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50">
+          <div className="px-4 py-2 border-b border-gray-200">
+            <p className="text-sm font-medium text-gray-900 truncate">{user?.displayName || user?.email}</p>
+            <p className="text-xs text-gray-500">Role: {role === 'admin' ? 'Admin' : 'Operator'}</p>
+          </div>
+          {role === 'admin' && (
+            <Link 
+              href="/audit-log" 
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              onClick={() => setIsOpen(false)}
+            >
+              Audit Log
+            </Link>
+          )}
+          <button
+            onClick={() => {
+              onLogout();
+              setIsOpen(false);
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 
 import { FormData } from './HistoryFormModal';
@@ -33,7 +109,6 @@ const initialForm: FormData = {
   bio_test: "",
   sterile_staff: "",
   result_reader: "",
-  printed_out_type: "Autoclave",
   items: Array(45).fill(null).map(() => ({ name: '', quantity: '' }))
 };
 
@@ -46,82 +121,18 @@ import { SterilizerEntry } from "@/dbService";
 export default function HistoryPage() {
   // ...
   const [clearAllFiltersTrigger, setClearAllFiltersTrigger] = useState(0);
-  // Date and input handling functions removed as they're not used
-
-  // Use ISO date strings for start/end for simpler UX
   const [dateRange, setDateRange] = useState({
     startDate: '',
     endDate: ''
   });
-
-  // helper to ensure ISO date strings (YYYY-MM-DD)
-  const ensureIso = (v: string) => v ? v.slice(0,10) : '';
-
-  // Set date range based on filter type (today, week, month, year)
-  const setDateRangeFilter = (type: 'today' | 'week' | 'month' | 'year') => {
-    const today = new Date();
-    const startDate = new Date();
-    
-    switch (type) {
-      case 'today':
-        // Set to today
-        break;
-      case 'week':
-        // Set to start of week (Sunday)
-        const day = today.getDay();
-        const diff = today.getDate() - day + (day === 0 ? -6 : 0); // Adjust for Sunday
-        startDate.setDate(diff);
-        break;
-      case 'month':
-        // Set to first day of month
-        startDate.setDate(1);
-        break;
-      case 'year':
-        // Set to first day of year
-        startDate.setMonth(0, 1);
-        break;
-    }
-
-    // Format dates
-    const formatDatePart = (date: Date) => ({
-      year: date.getFullYear().toString(),
-      month: (date.getMonth() + 1).toString().padStart(2, '0'),
-      day: date.getDate().toString().padStart(2, '0')
-    });
-
-    const start = formatDatePart(startDate);
-    const end = formatDatePart(today);
-
-    setDateRange({
-      startDate: `${start.year}-${start.month}-${start.day}`,
-      endDate: `${end.year}-${end.month}-${end.day}`
-    });
+  
+  const handleDateRangeChange = (range: { startDate: string; endDate: string }) => {
+    setDateRange(range);
   };
-
-  const handleStartDateChange = (value: string) => {
-    setDateRange(prev => ({ ...prev, startDate: ensureIso(value) }));
-  };
-
-  const handleEndDateChange = (value: string) => {
-    setDateRange(prev => ({ ...prev, endDate: ensureIso(value) }));
-  };
-
-  // Refs for native date inputs so we can trigger the native picker while showing a custom formatted value
-  const startDateInputRef = useRef<HTMLInputElement | null>(null);
-  const endDateInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Format ISO (YYYY-MM-DD) to yyyy/mm/dd for display (no timezone conversion)
-  const formatToYyMmDd = (iso: string) => {
-    if (!iso) return '';
-    const parts = iso.split('-');
-    if (parts.length !== 3) return iso;
-    const [yyyy, mm, dd] = parts;
-    return `${yyyy}/${mm}/${dd}`;
-  };
-
+  
   const handleClearAllFilters = () => {
     setClearAllFiltersTrigger(t => t + 1);
-  setDateRange({ startDate: '', endDate: '' });
+    setDateRange({ startDate: '', endDate: '' });
   };
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -439,8 +450,8 @@ export default function HistoryPage() {
       const beforeSnap = await getDoc(docRef);
       const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
       
-      // อัปเดตข้อมูลจริง
-      await updateDoc(docRef, {
+      // ข้อมูลที่อัปเดต
+      const updatedData = {
         test_date: editForm.test_date ? Timestamp.fromDate(new Date(String(editForm.test_date))) : Timestamp.now(),
         serial_number: editForm.serial_number || "",
         program: editForm.program || "",
@@ -450,7 +461,42 @@ export default function HistoryPage() {
         sterilization_time: editForm.sterilization_time || "",
         temperature: editForm.temperature || "",
         operator: editForm.operator || "",
-      });
+      };
+      
+      // อัปเดตข้อมูลจริง
+      await updateDoc(docRef, updatedData);
+      
+      // Log to audit log
+      if (user) {
+        await logAuditAction(
+          'UPDATE',
+          'sterilizer_entries',
+          editForm.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'แก้ไขข้อมูลการนึ่งฆ่าเชื้อ',
+            changed_fields: Object.keys(updatedData).filter(key => 
+              JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+            ),
+            old_values: Object.fromEntries(
+              Object.entries(updatedData)
+                .filter(([key]) => 
+                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+                )
+                .map(([key]) => [key, beforeData[key]])
+            ),
+            new_values: Object.fromEntries(
+              Object.entries(updatedData)
+                .filter(([key]) => 
+                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+                )
+            )
+          }
+        );
+      }
+      
       // บันทึก log การแก้ไข (action log)
       await addDoc(collection(db, "sterilizer_action_logs"), {
         action: "edit",
@@ -459,17 +505,7 @@ export default function HistoryPage() {
         role,
         at: Timestamp.now(),
         before: beforeData,
-        after: {
-          test_date: editForm.test_date,
-          serial_number: editForm.serial_number,
-          program: editForm.program,
-          items: editForm.items,
-          chemical_result: editForm.chemical_result,
-          biological_result: editForm.biological_result,
-          sterilization_time: editForm.sterilization_time,
-          temperature: editForm.temperature, // เพิ่มบรรทัดนี้
-          operator: editForm.operator,
-        },
+        after: updatedData,
       });
       setEdit(null);
     } catch (err: any) {
@@ -494,7 +530,26 @@ export default function HistoryPage() {
       // ดึงข้อมูลก่อนลบ
       const beforeSnap = await getDoc(doc(db, "sterilizer_entries", editForm.id));
       const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
+      
+      // Log to audit log before deleting
+      if (user) {
+        await logAuditAction(
+          'DELETE',
+          'sterilizer_entries',
+          editForm.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'ลบข้อมูลการนึ่งฆ่าเชื้อ',
+            deleted_data: beforeData
+          }
+        );
+      }
+      
+      // ลบข้อมูลจริง
       await deleteDoc(doc(db, "sterilizer_entries", editForm.id));
+      
       // log การลบ
       await addDoc(collection(db, "sterilizer_action_logs"), {
         action: "delete",
@@ -551,7 +606,12 @@ export default function HistoryPage() {
       const db = getFirestore();
       const docRef = doc(db, "sterilizer_ocr_entries", editOcrForm.id);
       
-      await updateDoc(docRef, {
+      // ดึงข้อมูลก่อนแก้ไข
+      const beforeSnap = await getDoc(docRef);
+      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
+      
+      // ข้อมูลที่อัปเดต
+      const updatedData = {
         serial_number: editOcrForm.serial_number || "",
         program: editOcrForm.program || "",
         chemical_result: editOcrForm.chemical_result || "",
@@ -560,7 +620,42 @@ export default function HistoryPage() {
         temperature: editOcrForm.temperature || "",
         operator: editOcrForm.operator || "",
         extracted_text: editOcrForm.extracted_text || "",
-      });
+      };
+      
+      // อัปเดตข้อมูลจริง
+      await updateDoc(docRef, updatedData);
+      
+      // Log to audit log
+      if (user) {
+        await logAuditAction(
+          'UPDATE',
+          'sterilizer_ocr_entries',
+          editOcrForm.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'แก้ไขข้อมูลการนึ่งฆ่าเชื้อ (OCR)',
+            changed_fields: Object.keys(updatedData).filter(key => 
+              JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+            ),
+            old_values: Object.fromEntries(
+              Object.entries(updatedData)
+                .filter(([key]) => 
+                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+                )
+                .map(([key]) => [key, beforeData[key]])
+            ),
+            new_values: Object.fromEntries(
+              Object.entries(updatedData)
+                .filter(([key]) => 
+                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
+                )
+            )
+          }
+        );
+      }
+      
       setEditOcr(null);
     } catch (err: any) {
       setEditOcrError(err.message || "เกิดข้อผิดพลาด");
@@ -580,6 +675,28 @@ export default function HistoryPage() {
     }
     try {
       const db = getFirestore();
+      
+      // ดึงข้อมูลก่อนลบ
+      const beforeSnap = await getDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
+      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
+      
+      // Log to audit log before deleting
+      if (user) {
+        await logAuditAction(
+          'DELETE',
+          'sterilizer_ocr_entries',
+          editOcrForm.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'ลบข้อมูลการนึ่งฆ่าเชื้อ (OCR)',
+            deleted_data: beforeData
+          }
+        );
+      }
+      
+      // ลบข้อมูลจริง
       await deleteDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
       setEditOcr(null);
     } catch (err: any) {
@@ -629,7 +746,7 @@ export default function HistoryPage() {
     try {
       const db = getFirestore();
       const checkboxResults = lastOcrApiResult?.checkboxResults;
-      await addDoc(collection(db, "sterilizer_ocr_entries"), {
+      const docRef = await addDoc(collection(db, "sterilizer_ocr_entries"), {
         image_url: previewImage,
         extracted_text: ocrText,
         created_by: user.email,
@@ -637,10 +754,26 @@ export default function HistoryPage() {
         ...(checkboxResults ? { checkboxResults } : {}),
       });
       setSaveSuccess("บันทึกสำเร็จ!");
-      setShowOcrModal(false);
+      setSaveSuccess("บันทึกข้อมูลสำเร็จ");
       setPreviewImage(null);
       setOcrText("");
-      setLastOcrApiResult(null);
+      setShowOcrModal(false);
+      
+      // Log the audit action
+      if (user) {
+        await logAuditAction(
+          'CREATE',
+          'sterilizer_ocr_entries',
+          docRef.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'สร้างรายการบันทึกข้อมูลการนึ่งฆ่าเชื้อ',
+            extracted_text: ocrText.substring(0, 100) + (ocrText.length > 100 ? '...' : '')
+          }
+        );
+      }
     } catch {
         setSaveSuccess("เกิดข้อผิดพลาดในการบันทึก");
       } finally {
@@ -669,12 +802,32 @@ export default function HistoryPage() {
       // กรอง device_id ออกจาก form ก่อนบันทึก (เฉพาะถ้ามี)
       const formWithoutDeviceId = { ...form };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
-      await addDoc(collection(db, "sterilizer_loads"), {
+      
+      // Add the new document
+      const docRef = await addDoc(collection(db, "sterilizer_loads"), {
         ...formWithoutDeviceId,
         items: filteredItems,
         created_by: user?.email,
         created_at: Timestamp.now(),
       });
+      
+      // Log the audit action
+      if (user) {
+        await logAuditAction(
+          'CREATE',
+          'sterilizer_loads',
+          docRef.id,
+          user.uid,
+          user.email || 'unknown',
+          role,
+          {
+            message: 'สร้างรายการบันทึกข้อมูลการนึ่งฆ่าเชื้อ (เพิ่มด้วยมือ)',
+            program: form.program || 'ไม่ระบุโปรแกรม',
+            sterilizer: form.sterilizer || 'ไม่ระบุเครื่องนึ่ง',
+            items_count: filteredItems.length
+          }
+        );
+      }
       // sync ไป collection เฉพาะทาง
       // const newCol = getColByProgram(form.program_name); // Removed
       // if (newCol) { // Removed
@@ -764,7 +917,7 @@ export default function HistoryPage() {
               <img 
                 src="/ram-logo.jpg" 
                 alt="RAM Hospital" 
-                className="w-33 h-22 object-contain hover:opacity-90 transition-opacity cursor-pointer"
+                className="w-40 h-30 object-contain hover:opacity-90 transition-opacity cursor-pointer"
               />
             </Link>
             <h1 className="text-2xl font-extrabold text-center drop-shadow">
@@ -773,160 +926,60 @@ export default function HistoryPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
-  <button
-    className="flex items-center bg-sky-500 hover:bg-sky-700 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[180px] justify-center"
-    onClick={() => setShowForm(true)}
-  >
-    <span className="mr-2">🧪</span> บันทึกรอบการทำงาน
-  </button>
+            <button
+              className="flex items-center bg-sky-500 hover:bg-sky-700 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[180px] justify-center"
+              onClick={() => setShowForm(true)}
+            >
+              <span className="mr-2">🧪</span> บันทึกรอบการทำงาน
+            </button>
 
-  {role === 'admin' && (
-    <Link href="/dashboard" className="bg-purple-500 hover:bg-purple-600 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[140px] flex items-center justify-center">Dashboard</Link>
-  )}
-  <button
-    onClick={handleLogout}
-    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[120px] flex items-center justify-center"
-  >
-    Logout
-  </button>
-</div>
-        </div>
-        {user && (
-          <div className="w-full mb-2 flex justify-end">
-            <div className="bg-purple-100 text-purple-700 rounded-full px-6 py-2 text-base font-semibold shadow min-w-[120px] flex items-center justify-center">
-              <span className="mr-2">👤</span>
-              <span className="truncate">{user.displayName || user.email}</span>
-            </div>
+            {role === 'admin' && (
+              <Link href="/dashboard" className="bg-purple-500 hover:bg-purple-600 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[140px] flex items-center justify-center">
+                Dashboard
+              </Link>
+            )}
+            
+            {user && (
+              <UserDropdown user={user} role={role} onLogout={handleLogout} />
+            )}
           </div>
-        )}
+        </div>
         
         <div className="w-full mt-1">
-          {/* Quick Date Filters */}
-          <div className="mb-4">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setDateRangeFilter('today')}
-                className="px-3 py-1 text-xs sm:text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full transition-colors"
-              >
-                วันนี้
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRangeFilter('week')}
-                className="px-3 py-1 text-xs sm:text-sm bg-green-100 hover:bg-green-200 text-green-800 rounded-full transition-colors"
-              >
-                สัปดาห์นี้
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRangeFilter('month')}
-                className="px-3 py-1 text-xs sm:text-sm bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full transition-colors"
-              >
-                เดือนนี้
-              </button>
-              <button
-                type="button"
-                onClick={() => setDateRangeFilter('year')}
-                className="px-3 py-1 text-xs sm:text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-full transition-colors"
-              >
-                ปีนี้
-              </button>
-            </div>
-          </div>
-
-          {/* Date Range Selectors - use native date inputs for simpler UX */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4 md:mb-6">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">จากวันที่</label>
-              <div className="relative">
-                {/* Visible formatted box */}
-                <button
-                  type="button"
-                  onClick={() => startDateInputRef.current?.showPicker ? startDateInputRef.current.showPicker() : startDateInputRef.current?.click()}
-                  className="w-full text-left rounded-md border border-gray-300 bg-white p-2 text-sm shadow-sm"
-                >
-                  {formatToYyMmDd(dateRange.startDate) || 'yyyy/mm/dd'}
-                </button>
-                {/* Native date input kept visually hidden but accessible for native pickers */}
-                <input
-                  ref={startDateInputRef}
-                  type="date"
-                  value={dateRange.startDate}
-                  onChange={(e) => handleStartDateChange(e.target.value)}
-                  className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                  aria-hidden="true"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => endDateInputRef.current?.showPicker ? endDateInputRef.current.showPicker() : endDateInputRef.current?.click()}
-                  className="w-full text-left rounded-md border border-gray-300 bg-white p-2 text-sm shadow-sm"
-                >
-                  {formatToYyMmDd(dateRange.endDate) || 'yyyy/mm/dd'}
-                </button>
-                <input
-                  ref={endDateInputRef}
-                  type="date"
-                  value={dateRange.endDate}
-                  onChange={(e) => handleEndDateChange(e.target.value)}
-                  className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                  aria-hidden="true"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-end">
-              <button
-                onClick={handleClearAllFilters}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-1.5 rounded shadow text-sm h-[38px] whitespace-nowrap w-full"
-                type="button"
-              >
-                ล้างตัวกรองทั้งหมด
-              </button>
-            </div>
-          </div>
+          <SterilizerLoadsCardView 
+            user={user} 
+            clearAllFiltersTrigger={clearAllFiltersTrigger}
+            onDateRangeChange={handleDateRangeChange}
+          />
+          
+          {edit && (
+            <EditLoadModal
+              editForm={editForm}
+              setEditForm={setEditForm}
+              onSave={handleEditSave}
+              onDelete={handleDelete}
+              loading={editLoading}
+              deleteLoading={false}
+              error={editError}
+              allLoads={entries}
+              user={user}
+            />
+          )}
+          
+          {editOcr && (
+            <EditLoadModal
+              editForm={editOcrForm}
+              setEditForm={setEditOcrForm}
+              onSave={handleEditOcrSave}
+              onDelete={handleDeleteOcr}
+              loading={editOcrLoading}
+              deleteLoading={false}
+              error={editOcrError}
+              allLoads={entries}
+              user={user}
+            />
+          )}
         </div>
-
-        {/* ลบตารางเดิมออก แล้วแสดงข้อมูล sterilizer_loads แบบ Card view */}
-        <SterilizerLoadsCardView 
-          user={user} 
-          clearAllFiltersTrigger={clearAllFiltersTrigger} 
-          dateRange={dateRange}
-        />
-        
-        {/* Modal Edit */}
-        {edit && (
-          <EditLoadModal
-            editForm={editForm}
-            setEditForm={setEditForm}
-            onSave={handleEditSave}
-            onDelete={handleDelete}
-            loading={editLoading}
-            deleteLoading={false}
-            error={editError}
-            allLoads={entries}
-            user={user}
-          />
-        )}
-        {editOcr && (
-          <EditLoadModal
-            editForm={editOcrForm}
-            setEditForm={setEditOcrForm}
-            onSave={handleEditOcrSave}
-            onDelete={handleDeleteOcr}
-            loading={editOcrLoading}
-            deleteLoading={false}
-            error={editOcrError}
-            allLoads={entries}
-            user={user}
-          />
-        )}
         <HistoryFormModal
           show={showForm}
           onClose={() => setShowForm(false)}
@@ -974,7 +1027,7 @@ export default function HistoryPage() {
         />
       </div>
       <div className="mt-8 text-white/80 text-center text-sm">
-        &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use
+        &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use | Thirdlnwza
       </div>
     </div>
   );

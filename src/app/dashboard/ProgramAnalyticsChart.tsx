@@ -48,39 +48,89 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
   const weekdays = data.weekdays || { labels: [], counts: [] };
   const hasWeekdayData = weekdays.labels?.length > 0 && 
                        weekdays.counts?.length > 0 && 
-                       weekdays.counts.some(count => count > 0);
+                       weekdays.counts.some((count: number) => count > 0);
 
+  // Calculate total count for percentage calculation
+  const totalCount = data.totalCounts.reduce((sum, count) => sum + count, 0) || 1;
+  // Calculate percentage for each program
+  const percentageCounts = data.totalCounts.map(count => {
+    const percentage = (count / totalCount) * 100;
+    // Ensure at least 5% height for visibility when there's data
+    return count > 0 ? Math.max(5, Math.round(percentage)) : 0;
+  });
+
+  // Filter out programs with no data
+  const hasData = (index: number) => data.totalCounts[index] > 0;
+  const filteredLabels = data.labels.filter((_, i) => hasData(i));
+  
   const barData = {
-    labels: data.labels,
+    labels: filteredLabels.length > 0 ? filteredLabels : ['โปรแกรม'],
     datasets: [
       {
         label: "อัตราความสำเร็จ (%)",
-        data: data.successRates,
-        backgroundColor: CHART_COLORS.successRate,
+        data: data.labels.map((_, i) => hasData(i) ? data.successRates[i] : null),
+        backgroundColor: (context: any) => {
+          const bgColor = CHART_COLORS.successRate;
+          const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
+          gradient.addColorStop(0, `${bgColor}cc`);
+          gradient.addColorStop(1, `${bgColor}66`);
+          return gradient;
+        },
         borderColor: CHART_COLORS.successRate,
-        borderWidth: 1,
+        borderWidth: 2,
+        borderRadius: 6,
+        borderSkipped: false,
         yAxisID: 'y',
+        barThickness: 30,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowBlur: 4,
+        shadowOffsetX: 1,
+        shadowOffsetY: 1,
       },
       {
-        label: "จำนวนรอบทั้งหมด",
-        data: data.totalCounts,
-        backgroundColor: CHART_COLORS.totalCount,
+        label: "สัดส่วนรอบทั้งหมด (%)",
+        data: data.labels.map((_, i) => hasData(i) ? percentageCounts[i] : null),
+        backgroundColor: (context: any) => {
+          const bgColor = CHART_COLORS.totalCount;
+          const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
+          gradient.addColorStop(0, `${bgColor}99`);
+          gradient.addColorStop(1, `${bgColor}33`);
+          return gradient;
+        },
         borderColor: CHART_COLORS.totalCount,
         borderWidth: 1,
-        yAxisID: 'y',
+        borderRadius: 4,
+        borderSkipped: false,
+        yAxisID: 'y1',
+        barThickness: 30,
+        type: 'bar' as const,
+        order: 2,
       },
       {
         label: "เวลาเฉลี่ย (นาที)",
-        data: data.avgDurations,
-        backgroundColor: CHART_COLORS.avgTime,
+        data: data.labels.map((_, i) => hasData(i) ? data.avgDurations[i] : null),
+        backgroundColor: (context: any) => {
+          const bgColor = CHART_COLORS.avgTime;
+          const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
+          gradient.addColorStop(0, `${bgColor}cc`);
+          gradient.addColorStop(1, `${bgColor}66`);
+          return gradient;
+        },
         borderColor: CHART_COLORS.avgTime,
-        borderWidth: 1,
+        borderWidth: 2,
+        borderRadius: 6,
+        borderSkipped: false,
         yAxisID: 'y1',
+        barThickness: 30,
+        shadowColor: 'rgba(0, 0, 0, 0.2)',
+        shadowBlur: 8,
+        shadowOffsetX: 2,
+        shadowOffsetY: 2,
       },
     ],
   };
 
-  const barOptions = {
+  const barOptions: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -90,37 +140,122 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
           font: {
             size: 12,
           },
+          padding: 20,
+          usePointStyle: true,
         },
       },
-      title: { 
-        display: true, 
-        text: "การวิเคราะห์ตามประเภทโปรแกรม",
-        font: {
-          size: 16,
-          weight: 'bold' as const,
-        },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        titleColor: '#1F2937',
+        bodyColor: '#1F2937',
+        borderColor: '#E5E7EB',
+        borderWidth: 1,
+        padding: 12,
+        callbacks: {
+          label: function(context: any) {
+            let label = context.dataset.label || '';
+            if (label) {
+              label += ': ';
+            }
+            if (context.parsed.y !== null) {
+              if (label.includes('อัตรา')) {
+                label += context.parsed.y.toFixed(1) + '%';
+              } else if (label.includes('เวลาเฉลี่ย')) {
+                label += context.parsed.y.toFixed(1) + ' นาที';
+              } else if (label.includes('สัดส่วนรอบทั้งหมด')) {
+                const index = context.dataIndex;
+                const actualCount = data.totalCounts[index];
+                const percentage = Math.round((actualCount / totalCount) * 100);
+                label = `สัดส่วน: ${percentage}% (${actualCount} รอบ)`;
+              }
+            }
+            return label;
+          }
+        }
       },
     },
     scales: {
-      y: {
-        beginAtZero: true,
-        title: { display: true, text: 'อัตราความสำเร็จ (%)' },
-        min: 0,
-        max: 100,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-      },
-      y1: {
-        beginAtZero: true,
-        position: 'right' as const,
-        title: { display: true, text: 'เวลาเฉลี่ย (นาที)' },
-        grid: { drawOnChartArea: false },
-      },
       x: {
         grid: {
           display: false,
         },
+        ticks: {
+          color: '#6B7280',
+          font: {
+            weight: 'bold',
+            family: '"Kanit", sans-serif',
+            size: 12,
+          },
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+          display: true,
+          text: 'ร้อยละ (%)',
+          color: CHART_COLORS.successRate,
+          font: {
+            weight: 'bold',
+          },
+        },
+        grid: {
+          color: '#E5E7EB',
+        },
+        ticks: {
+          color: CHART_COLORS.successRate,
+          callback: function(value) {
+            if (typeof value === 'number') {
+              return `${value}%`;
+            }
+            return value;
+          },
+        },
+        max: 110,
+      },
+      y1: {
+        type: 'linear' as const,
+        display: true,
+        position: 'right' as const,
+        title: {
+          display: true,
+          text: 'สัดส่วนรอบทั้งหมด (%)',
+          color: CHART_COLORS.totalCount,
+          font: {
+            weight: 'bold',
+          },
+        },
+        min: 0,
+        max: 100,
+        suggestedMin: 0,
+        suggestedMax: 100,
+        beginAtZero: true,
+        grid: {
+          display: false,
+        },
+        ticks: {
+          color: CHART_COLORS.totalCount,
+          callback: function(value) {
+            if (typeof value === 'number') {
+              return `${value}%`;
+            }
+            return value;
+          },
+          stepSize: 20,
+          maxTicksLimit: 6,
+        },
+        afterFit: function(scale) {
+          scale.paddingTop = 10;
+          scale.paddingBottom = 10;
+        }
+      },
+    },
+    elements: {
+      bar: {
+        borderSkipped: false,
       },
     },
   };
