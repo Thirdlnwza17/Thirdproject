@@ -56,9 +56,43 @@ export default function HistoryFormModal({
   successMsg, 
   user 
 }: FormModalProps) {
+  // ฟังก์ชันคำนวณสถานะ
+  const calculateStatus = (formData: FormData): string => {
+    // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+    const hasTestResults = 
+      formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
+      formData.chemical_external === 'ผ่าน' || formData.chemical_external === 'ไม่ผ่าน' ||
+      formData.chemical_internal === 'ผ่าน' || formData.chemical_internal === 'ไม่ผ่าน' ||
+      formData.bio_test === 'ผ่าน' || formData.bio_test === 'ไม่ผ่าน';
+    
+    // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+    if (!hasTestResults) {
+      return 'NONE';
+    }
+    
+    // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
+    if (
+      formData.mechanical === 'ไม่ผ่าน' ||
+      formData.chemical_external === 'ไม่ผ่าน' ||
+      formData.chemical_internal === 'ไม่ผ่าน' ||
+      formData.bio_test === 'ไม่ผ่าน'
+    ) {
+      return 'FAIL';
+    }
+    
+    // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
+    return 'PASS';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // คำนวณและกำหนดสถานะก่อนส่งข้อมูล
+      const formDataWithStatus = {
+        ...form,
+        status: calculateStatus(form)
+      };
+      
       await Promise.resolve(onSubmit(e));
       // Show success message with SweetAlert2
       await Swal.fire({

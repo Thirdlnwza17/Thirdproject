@@ -22,6 +22,7 @@ export interface SterilizerEntry {
 
 export interface ProgramAnalytics {
   label: string;
+  description?: string;
   total: number;
   successRate: number;
   avgTime: number;

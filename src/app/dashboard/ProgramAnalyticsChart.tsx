@@ -10,9 +10,9 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement,
   ChartData,
-  ChartOptions
+  ChartOptions,
+  ArcElement
 } from "chart.js";
 import { CHART_COLORS } from "./constants";
 
@@ -26,29 +26,23 @@ ChartJS.register(
   ArcElement
 );
 
-export interface WeekdayData {
-  labels: string[];
-  counts: number[];
-}
-
 export interface ProgramAnalyticsData {
   labels: string[];
   successRates: number[];
   avgDurations: number[];
   totalCounts: number[];
-  weekdays?: WeekdayData;
 }
 
 interface Props {
   data: ProgramAnalyticsData;
+  weekdayData?: {
+    labels: string[];
+    counts: number[];
+  };
 }
 
-const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
+const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
   const [showPieChart, setShowPieChart] = useState(false);
-  const weekdays = data.weekdays || { labels: [], counts: [] };
-  const hasWeekdayData = weekdays.labels?.length > 0 && 
-                       weekdays.counts?.length > 0 && 
-                       weekdays.counts.some((count: number) => count > 0);
 
   // Calculate total count for percentage calculation
   const totalCount = data.totalCounts.reduce((sum, count) => sum + count, 0) || 1;
@@ -62,6 +56,88 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
   // Filter out programs with no data
   const hasData = (index: number) => data.totalCounts[index] > 0;
   const filteredLabels = data.labels.filter((_, i) => hasData(i));
+  
+  // Prepare pie chart data for weekday usage - show all days
+  const pieData: ChartData<'pie', number[], string> = {
+    labels: weekdayData ? weekdayData.labels : [],
+    datasets: [
+      {
+        data: weekdayData ? weekdayData.counts : [],
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.8)',   // Monday - Red
+          'rgba(54, 162, 235, 0.8)',   // Tuesday - Blue
+          'rgba(255, 206, 86, 0.8)',   // Wednesday - Yellow
+          'rgba(75, 192, 192, 0.8)',   // Thursday - Teal
+          'rgba(255, 159, 64, 0.8)',   // Friday - Orange
+          'rgba(153, 102, 255, 0.8)',  // Saturday - Purple
+          'rgba(201, 203, 207, 0.8)'   // Sunday - Gray
+        ],
+        borderColor: [
+          'rgba(255, 99, 132, 1)',
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(255, 159, 64, 1)',
+          'rgba(153, 102, 255, 1)',
+          'rgba(201, 203, 207, 1)'
+        ],
+        borderWidth: 2,
+        hoverBorderWidth: 3,
+      },
+    ],
+  };
+
+  const pieOptions: ChartOptions<'pie'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          font: {
+            size: 12,
+            weight: 'bold',
+          },
+          color: '#6B7280',
+          padding: 15,
+          usePointStyle: true,
+        },
+      },
+      title: {
+        display: true,
+        text: 'จำนวนรอบการใช้งานแยกตามวันในสัปดาห์',
+        font: {
+          size: 16,
+          weight: 'bold' as const,
+        },
+        color: '#6B7280',
+        padding: {
+          top: 10,
+          bottom: 20,
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        titleColor: '#6B7280',
+        bodyColor: '#6B7280',
+        borderColor: '#E5E7EB',
+        borderWidth: 1,
+        padding: 12,
+        callbacks: {
+          label: (context) => {
+            const label = context.label || '';
+            const value = context.raw as number;
+            const totalWeekdayCount = weekdayData ? weekdayData.counts.reduce((sum, count) => sum + count, 0) : 0;
+            if (value === 0) {
+              return `${label}: ไม่มีข้อมูล`;
+            }
+            const percentage = totalWeekdayCount > 0 ? Math.round((value / totalWeekdayCount) * 100) : 0;
+            return `${label}: ${value} รอบ (${percentage}%)`;
+          },
+        },
+      },
+    },
+  };
   
   const barData = {
     labels: filteredLabels.length > 0 ? filteredLabels : ['โปรแกรม'],
@@ -139,8 +215,9 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
         labels: {
           font: {
             size: 12,
+            weight: 'bold'
           },
-          padding: 20,
+          padding: 8,
           usePointStyle: true,
         },
       },
@@ -152,7 +229,7 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
         bodyColor: '#1F2937',
         borderColor: '#E5E7EB',
         borderWidth: 1,
-        padding: 12,
+        padding: 8,
         callbacks: {
           label: function(context: any) {
             let label = context.dataset.label || '';
@@ -186,7 +263,7 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
           font: {
             weight: 'bold',
             family: '"Kanit", sans-serif',
-            size: 12,
+            size: 10,
           },
         },
       },
@@ -195,12 +272,13 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
         display: true,
         position: 'left' as const,
         title: {
-          display: true,
-          text: 'ร้อยละ (%)',
-          color: CHART_COLORS.successRate,
+          display: false,
+          text: 'อัตราความสำเร็จและสัดส่วนการใช้งาน',
           font: {
-            weight: 'bold',
+            size: 10,
+            weight: 'bold'
           },
+          padding: { bottom: 2 }
         },
         grid: {
           color: '#E5E7EB',
@@ -221,12 +299,13 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
         display: true,
         position: 'right' as const,
         title: {
-          display: true,
+          display: false,
           text: 'สัดส่วนรอบทั้งหมด (%)',
           color: CHART_COLORS.totalCount,
           font: {
-            weight: 'bold',
-          },
+            size: 9,
+            weight: 'bold'
+          }
         },
         min: 0,
         max: 100,
@@ -260,125 +339,51 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data }) => {
     },
   };
 
-  // Prepare pie chart data
-  const pieData: ChartData<'pie', number[], string> = {
-    labels: weekdays.labels,
-    datasets: [
-      {
-        data: weekdays.counts,
-        backgroundColor: [
-          'rgba(54, 162, 235, 0.8)',   // Monday - Blue
-          'rgba(255, 99, 132, 0.8)',   // Tuesday - Red
-          'rgba(255, 206, 86, 0.8)',   // Wednesday - Yellow
-          'rgba(75, 192, 192, 0.8)',   // Thursday - Teal
-          'rgba(153, 102, 255, 0.8)',  // Friday - Purple
-          'rgba(255, 159, 64, 0.8)',   // Saturday - Orange
-          'rgba(201, 203, 207, 0.8)'   // Sunday - Gray
-        ],
-        borderColor: [
-          'rgba(54, 162, 235, 1)',
-          'rgba(255, 99, 132, 1)',
-          'rgba(255, 206, 86, 1)',
-          'rgba(75, 192, 192, 1)',
-          'rgba(153, 102, 255, 1)',
-          'rgba(255, 159, 64, 1)',
-          'rgba(201, 203, 207, 1)'
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
 
-  const pieOptions: ChartOptions<'pie'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom' as const,
-        labels: {
-          font: {
-            size: 12,
-          },
-        },
-      },
-      title: {
-        display: true,
-        text: 'จำนวนรอบการใช้งานแยกตามวันในสัปดาห์',
-        font: {
-          size: 16,
-          weight: 'bold' as const,
-        },
-      },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const label = context.label || '';
-            const value = context.raw as number;
-            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-            const percentage = Math.round((value / total) * 100);
-            return `${label}: ${value} รอบ (${percentage}%)`;
-          },
-        },
-      },
-    },
-  };
 
   return (
-    <div className="w-full h-[600px] bg-white rounded-xl shadow-lg p-6 relative">
-      <div className="absolute top-4 right-4 z-10">
+    <div className="w-full h-full flex flex-col">
+      <div className="mb-2 flex justify-between items-center">
+        <h3 className="text-sm font-semibold text-gray-800">สถิติการทำงาน</h3>
         <button
           onClick={() => setShowPieChart(!showPieChart)}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+          className="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200"
         >
           {showPieChart ? 'แสดงกราฟแท่ง' : 'แสดงกราฟวงกลม'}
         </button>
       </div>
-      <div className="h-[calc(100%-40px)] w-full">
-        {showPieChart && hasWeekdayData ? (
-          <div className="h-full w-full flex items-center justify-center">
+      <div className="flex-1 w-full overflow-x-auto">
+        <div className="min-w-[600px] h-full">
+          {showPieChart ? (
             <Pie 
               data={pieData} 
+              options={pieOptions}
+              className="w-full h-full" 
+            />
+          ) : (
+            <Bar 
+              data={barData} 
               options={{
-                ...pieOptions,
+                ...barOptions,
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
-                  ...pieOptions.plugins,
+                  ...barOptions.plugins,
                   legend: {
-                    ...pieOptions.plugins?.legend,
+                    ...barOptions.plugins?.legend,
                     labels: {
+                      ...barOptions.plugins?.legend?.labels,
                       font: {
-                        size: 14,
+                        size: typeof window !== 'undefined' && window.innerWidth < 640 ? 10 : 12,
                       },
                     },
                   },
                 },
-              }} 
-              className="max-h-full" 
+              }}
+              className="w-full h-full min-h-[300px]"
             />
-          </div>
-        ) : showPieChart && !hasWeekdayData ? (
-          <div className="h-full flex items-center justify-center text-gray-500">
-            ไม่พบข้อมูลการใช้งานในสัปดาห์นี้
-          </div>
-        ) : (
-          <Bar 
-            data={barData} 
-            options={{
-              ...barOptions,
-              plugins: {
-                ...barOptions.plugins,
-                legend: {
-                  ...barOptions.plugins?.legend,
-                  labels: {
-                    font: {
-                      size: 14,
-                    },
-                  },
-                },
-              },
-            }} 
-            className="max-h-full" 
-          />
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

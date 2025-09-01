@@ -44,7 +44,7 @@ export interface FirestoreDocument {
 
 export interface SterilizerEntry extends FirestoreDocument {
   id: string;
-  status?: "PASS" | "FAIL" | "CANCEL";
+  status?: "PASS" | "FAIL" | "NONE";
   program_name?: string;
   program?: string;
   created_at?: { toDate: () => Date };
@@ -240,6 +240,34 @@ export async function getUserRole(uid: string): Promise<string> {
   return userSnap.exists() && userSnap.data().role ? userSnap.data().role : "operator";
 }
 
+// ฟังก์ชันคำนวณสถานะ
+function calculateStatus(data: any): "PASS" | "FAIL" | "NONE" {
+  // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+  const hasTestResults = 
+    data.mechanical === 'ผ่าน' || data.mechanical === 'ไม่ผ่าน' ||
+    data.chemical_external === 'ผ่าน' || data.chemical_external === 'ไม่ผ่าน' ||
+    data.chemical_internal === 'ผ่าน' || data.chemical_internal === 'ไม่ผ่าน' ||
+    data.bio_test === 'ผ่าน' || data.bio_test === 'ไม่ผ่าน';
+  
+  // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+  if (!hasTestResults) {
+    return 'NONE';
+  }
+  
+  // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
+  if (
+    data.mechanical === 'ไม่ผ่าน' ||
+    data.chemical_external === 'ไม่ผ่าน' ||
+    data.chemical_internal === 'ไม่ผ่าน' ||
+    data.bio_test === 'ไม่ผ่าน'
+  ) {
+    return 'FAIL';
+  }
+  
+  // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
+  return 'PASS';
+}
+
 // Subscribe to sterilizer loads
 export function subscribeToSterilizerLoads(
   onUpdate: (entries: SterilizerEntry[]) => void,
@@ -255,7 +283,7 @@ export function subscribeToSterilizerLoads(
         const data = doc.data();
         entries.push({
           id: doc.id,
-          status: data.status,
+          status: calculateStatus(data), // ใช้ฟังก์ชันคำนวณสถานะ
           program_name: data.program_name,
           program: data.program,
           created_at: data.created_at,

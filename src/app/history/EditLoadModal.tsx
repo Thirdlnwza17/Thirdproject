@@ -852,11 +852,42 @@ export default function EditLoadModal({
     onSave(editForm);
   };
 
+  // ฟังก์ชันคำนวณสถานะ
+  const calculateStatus = (formData: any): string => {
+    // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+    const hasTestResults = 
+      formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
+      formData.chemical_external === 'ผ่าน' || formData.chemical_external === 'ไม่ผ่าน' ||
+      formData.chemical_internal === 'ผ่าน' || formData.chemical_internal === 'ไม่ผ่าน' ||
+      formData.bio_test === 'ผ่าน' || formData.bio_test === 'ไม่ผ่าน';
+    
+    // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+    if (!hasTestResults) {
+      return 'NONE';
+    }
+    
+    // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
+    if (
+      formData.mechanical === 'ไม่ผ่าน' ||
+      formData.chemical_external === 'ไม่ผ่าน' ||
+      formData.chemical_internal === 'ไม่ผ่าน' ||
+      formData.bio_test === 'ไม่ผ่าน'
+    ) {
+      return 'FAIL';
+    }
+    
+    // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
+    return 'PASS';
+  };
+
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       // Create a copy of the form data
       const formData = { ...editForm };
+      
+      // คำนวณและกำหนดสถานะ
+      formData.status = calculateStatus(formData);
       
       // Check if attest image is present but no BI test is selected
       if (formData.image_url_2 && !formData.bio_test) {

@@ -38,7 +38,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full px-4 py-2 font-semibold shadow transition-colors"
+        className="flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full px-4 py-2 font-semibold shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md"
       >
         <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-purple-300">
           <Image 
@@ -81,7 +81,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
               onLogout();
               setIsOpen(false);
             }}
-            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-300 transform hover:-translate-y-0.5"
           >
             Sign out
           </button>
@@ -93,6 +93,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
 
 
 import { FormData } from './HistoryFormModal';
+import BubbleBackground from "@/components/BubbleBackground";
 
 // Initialize form with default values that match the FormData type
 const initialForm: FormData = {
@@ -746,9 +747,39 @@ export default function HistoryPage() {
     try {
       const db = getFirestore();
       const checkboxResults = lastOcrApiResult?.checkboxResults;
+      
+      // ฟังก์ชันคำนวณสถานะ
+      const calculateStatus = (checkboxResults: any): string => {
+        // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+        const hasTestResults = 
+          checkboxResults?.mechanical === 'ผ่าน' || checkboxResults?.mechanical === 'ไม่ผ่าน' ||
+          checkboxResults?.chemical_external === 'ผ่าน' || checkboxResults?.chemical_external === 'ไม่ผ่าน' ||
+          checkboxResults?.chemical_internal === 'ผ่าน' || checkboxResults?.chemical_internal === 'ไม่ผ่าน' ||
+          checkboxResults?.bio_test === 'ผ่าน' || checkboxResults?.bio_test === 'ไม่ผ่าน';
+        
+        // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+        if (!hasTestResults) {
+          return 'NONE';
+        }
+        
+        // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
+        if (
+          checkboxResults?.mechanical === 'ไม่ผ่าน' ||
+          checkboxResults?.chemical_external === 'ไม่ผ่าน' ||
+          checkboxResults?.chemical_internal === 'ไม่ผ่าน' ||
+          checkboxResults?.bio_test === 'ไม่ผ่าน'
+        ) {
+          return 'FAIL';
+        }
+        
+        // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
+        return 'PASS';
+      };
+      
       const docRef = await addDoc(collection(db, "sterilizer_ocr_entries"), {
         image_url: previewImage,
         extracted_text: ocrText,
+        status: calculateStatus(checkboxResults), // คำนวณและกำหนดสถานะ
         created_by: user.email,
         created_at: Timestamp.now(),
         ...(checkboxResults ? { checkboxResults } : {}),
@@ -803,10 +834,39 @@ export default function HistoryPage() {
       const formWithoutDeviceId = { ...form };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
       
+      // ฟังก์ชันคำนวณสถานะ
+      const calculateStatus = (formData: any): string => {
+        // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+        const hasTestResults = 
+          formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
+          formData.chemical_external === 'ผ่าน' || formData.chemical_external === 'ไม่ผ่าน' ||
+          formData.chemical_internal === 'ผ่าน' || formData.chemical_internal === 'ไม่ผ่าน' ||
+          formData.bio_test === 'ผ่าน' || formData.bio_test === 'ไม่ผ่าน';
+        
+        // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+        if (!hasTestResults) {
+          return 'NONE';
+        }
+        
+        // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
+        if (
+          formData.mechanical === 'ไม่ผ่าน' ||
+          formData.chemical_external === 'ไม่ผ่าน' ||
+          formData.chemical_internal === 'ไม่ผ่าน' ||
+          formData.bio_test === 'ไม่ผ่าน'
+        ) {
+          return 'FAIL';
+        }
+        
+        // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
+        return 'PASS';
+      };
+
       // Add the new document
       const docRef = await addDoc(collection(db, "sterilizer_loads"), {
         ...formWithoutDeviceId,
         items: filteredItems,
+        status: calculateStatus(formWithoutDeviceId), // คำนวณและกำหนดสถานะ
         created_by: user?.email,
         created_at: Timestamp.now(),
       });
@@ -902,15 +962,17 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-purple-400 to-blue-400">
-        <div className="text-white text-xl font-semibold animate-pulse">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 relative overflow-hidden">
+        <BubbleBackground />
+        <div className="text-blue-900 text-xl font-semibold animate-pulse relative z-10">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-500 p-4">
-      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-200 to-blue-300 p-4 relative overflow-hidden">
+      <BubbleBackground />
+      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10">
         <div className="w-full flex flex-col sm:flex-row gap-3 items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <Link href="/dashboard">
@@ -927,14 +989,14 @@ export default function HistoryPage() {
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <button
-              className="flex items-center bg-sky-500 hover:bg-sky-700 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[180px] justify-center"
+              className="flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full px-6 py-2.5 text-base font-semibold shadow-md transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg min-w-[180px] justify-center"
               onClick={() => setShowForm(true)}
             >
-              <span className="mr-2">🧪</span> บันทึกรอบการทำงาน
+              <img src="/Save-as_37111.png" alt="บันทึก" className="w-5 h-5 mr-2" /> บันทึกรอบการทำงาน
             </button>
 
             {role === 'admin' && (
-              <Link href="/dashboard" className="bg-purple-500 hover:bg-purple-600 text-white rounded-full px-6 py-2 text-base font-semibold shadow transition-all min-w-[140px] flex items-center justify-center">
+              <Link href="/dashboard" className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-full px-6 py-2.5 text-base font-semibold shadow-md transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg min-w-[140px] flex items-center justify-center">
                 Dashboard
               </Link>
             )}
@@ -1026,7 +1088,7 @@ export default function HistoryPage() {
           onImageDoubleClick={handleImageDoubleClick}
         />
       </div>
-      <div className="mt-8 text-white/80 text-center text-sm">
+      <div className="mt-8 text-black text-center text-sm">
         &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use | Thirdlnwza
       </div>
     </div>

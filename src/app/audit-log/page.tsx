@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -41,13 +41,177 @@ const CollapsibleContent: React.FC<CollapsibleContentProps> = ({ content, maxLen
   );
 };
 
+interface Bubble {
+  x: number;
+  y: number;
+  radius: number;
+  dx: number;
+  dy: number;
+  alpha: number;
+}
+
 const ITEMS_PER_PAGE = 10;
 
 export default function AuditLogPage() {
   const router = useRouter();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const bubblesRef = useRef<Bubble[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [users, setUsers] = useState<Record<string, { fullName: string, role: string }>>({});
   const [loading, setLoading] = useState(true);
+
+  // Bubble animation effect
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas size
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resizeCanvas();
+
+    // Create bubbles
+    const createBubbles = () => {
+      const bubbles: Bubble[] = [];
+      const bubbleCount = Math.floor((window.innerWidth * window.innerHeight) / 40000);
+      
+      for (let i = 0; i < bubbleCount; i++) {
+        const radius = Math.random() * 20 + 10;
+        bubbles.push({
+          x: Math.random() * (canvas.width - radius * 2) + radius,
+          y: Math.random() * (canvas.height - radius * 2) + radius,
+          radius,
+          dx: (Math.random() - 0.5) * 0.5,
+          dy: (Math.random() - 0.5) * 0.5,
+          alpha: Math.random() * 0.3 + 0.2
+        });
+      }
+      return bubbles;
+    };
+
+    // Draw a bubble
+    const drawBubble = (bubble: Bubble) => {
+      if (!ctx) return;
+      
+      ctx.beginPath();
+      ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200, 230, 255, ${bubble.alpha})`;
+      ctx.fill();
+      
+      // Add highlight
+      ctx.beginPath();
+      ctx.arc(
+        bubble.x - bubble.radius * 0.3,
+        bubble.y - bubble.radius * 0.3,
+        bubble.radius * 0.4,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = `rgba(255, 255, 255, ${bubble.alpha * 0.6})`;
+      ctx.fill();
+    };
+
+    // Update bubble positions
+    const updateBubbles = () => {
+      const bubbles = bubblesRef.current;
+      
+      for (let i = 0; i < bubbles.length; i++) {
+        const bubble = bubbles[i];
+        
+        // Move bubble
+        bubble.x += bubble.dx;
+        bubble.y += bubble.dy;
+        
+        // Bounce off edges
+        if (bubble.x - bubble.radius < 0 || bubble.x + bubble.radius > canvas.width) {
+          bubble.dx = -bubble.dx;
+        }
+        if (bubble.y - bubble.radius < 0 || bubble.y + bubble.radius > canvas.height) {
+          bubble.dy = -bubble.dy;
+        }
+        
+        // Check collision with other bubbles
+        for (let j = i + 1; j < bubbles.length; j++) {
+          const otherBubble = bubbles[j];
+          const dx = bubble.x - otherBubble.x;
+          const dy = bubble.y - otherBubble.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < bubble.radius + otherBubble.radius) {
+            // Simple elastic collision
+            const angle = Math.atan2(dy, dx);
+            const sin = Math.sin(angle);
+            const cos = Math.cos(angle);
+            
+            // Rotate velocities
+            const vx1 = bubble.dx * cos + bubble.dy * sin;
+            const vy1 = bubble.dy * cos - bubble.dx * sin;
+            const vx2 = otherBubble.dx * cos + otherBubble.dy * sin;
+            const vy2 = otherBubble.dy * cos - otherBubble.dx * sin;
+            
+            // Swap velocities
+            bubble.dx = vx2 * cos - vy1 * sin;
+            bubble.dy = vy1 * cos + vx2 * sin;
+            otherBubble.dx = vx1 * cos - vy2 * sin;
+            otherBubble.dy = vy2 * cos + vx1 * sin;
+            
+            // Move bubbles apart to prevent sticking
+            const overlap = bubble.radius + otherBubble.radius - distance;
+            const moveX = (overlap / 2) * Math.cos(angle);
+            const moveY = (overlap / 2) * Math.sin(angle);
+            
+            bubble.x += moveX;
+            bubble.y += moveY;
+            otherBubble.x -= moveX;
+            otherBubble.y -= moveY;
+          }
+        }
+      }
+    };
+
+    // Animation loop
+    const animate = () => {
+      if (!ctx) return;
+      
+      // Clear with slight fade for trail effect
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw bubbles
+      updateBubbles();
+      bubblesRef.current.forEach(bubble => drawBubble(bubble));
+      
+      // Continue animation
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    // Handle window resize
+    const handleResize = () => {
+      resizeCanvas();
+      bubblesRef.current = createBubbles();
+    };
+
+    // Initialize
+    bubblesRef.current = createBubbles();
+    animate();
+    
+    // Add event listeners
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -337,8 +501,12 @@ export default function AuditLogPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-8 relative">
+      <canvas 
+        ref={canvasRef} 
+        className="fixed top-0 left-0 w-full h-full pointer-events-none z-0"
+      />
+      <div className="max-w-7xl mx-auto relative z-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 relative">

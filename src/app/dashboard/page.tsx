@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
 import Link from "next/link";
 import Image from 'next/image';
+import { VercelDateRangePicker } from "@/components/VercelDateRangePicker";
 import { 
   getUserRole, 
   subscribeToSterilizerLoads, 
@@ -17,7 +18,30 @@ import {
 
 import { MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
 import ProgramAnalyticsChart, { ProgramAnalyticsData } from "./ProgramAnalyticsChart";
-import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry } from "./analyticsService";
+import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry, ProgramAnalytics } from "./analyticsService";
+import BubbleBackground from "@/components/BubbleBackground";
+
+// Dashboard Card Component
+const DashboardCard = ({ 
+  title, 
+  children, 
+  className = '' 
+}: { 
+  title?: string; 
+  children: React.ReactNode; 
+  className?: string; 
+}) => (
+  <div className={`bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden ${className}`}>
+    {title && (
+      <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-100">
+        <h3 className="text-xl font-bold text-blue-900">{title}</h3>
+      </div>
+    )}
+    <div className="p-6">
+      {children}
+    </div>
+  </div>
+);
 
 // User dropdown component
 const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
@@ -40,7 +64,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full px-4 py-2 font-semibold shadow transition-colors"
+        className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full px-4 py-2 font-semibold shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0"
       >
         <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-blue-300">
           <Image 
@@ -72,7 +96,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
           {role === 'admin' && (
             <Link 
               href="/audit-log" 
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
               onClick={() => setIsOpen(false)}
             >
               Audit Log
@@ -83,7 +107,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
               onLogout();
               setIsOpen(false);
             }}
-            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0"
           >
             Sign out
           </button>
@@ -102,8 +126,23 @@ function normalizeStatus(status: any): "PASS" | "FAIL" | "CANCEL" {
   return "FAIL"; // fallback
 }
 
+// ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
+function hasTestResults(data: any): boolean {
+  return (
+    data.mechanical === 'ผ่าน' || data.mechanical === 'ไม่ผ่าน' ||
+    data.chemical_external === 'ผ่าน' || data.chemical_external === 'ไม่ผ่าน' ||
+    data.chemical_internal === 'ผ่าน' || data.chemical_internal === 'ไม่ผ่าน' ||
+    data.bio_test === 'ผ่าน' || data.bio_test === 'ไม่ผ่าน'
+  );
+}
+
 // ถ้า indicator ตัวใด "ไม่ผ่าน" ให้ถือว่า FAIL
-function getEntryStatus(data: any): "PASS" | "FAIL" | "CANCEL" {
+function getEntryStatus(data: any): "PASS" | "FAIL" | "CANCEL" | "NONE" {
+  // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+  if (!hasTestResults(data)) {
+    return "NONE";
+  }
+  
   if (
     data.bio_test === "ไม่ผ่าน" ||
     data.mechanical === "ไม่ผ่าน" ||
@@ -131,7 +170,7 @@ export default function DashboardPage() {
   // Extend the type to include our computed fields
   interface DashboardEntry extends Omit<SterilizerEntry, 'status' | 'created_at' | 'toDate'> {
     id: string;
-    status: "PASS" | "FAIL" | "CANCEL";
+    status: "PASS" | "FAIL" | "CANCEL" | "NONE";
     program_name: string;
     created_at: { toDate: () => Date } | undefined;
     checkboxResults: CheckboxResults;
@@ -148,22 +187,15 @@ export default function DashboardPage() {
   const [entriesPerPage] = useState(10);
   const [selectedProgram] = useState<string>("ALL");
   const [selectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
-  const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
   const [isProgramDetailsExpanded, setIsProgramDetailsExpanded] = useState(true);
-  // Toggle program expansion
-  const toggleProgram = (programLabel: string) => {
-    setExpandedPrograms(prev => ({
-      ...prev,
-      [programLabel]: !prev[programLabel]
-    }));
-  };
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
 
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-
-  // Refs for native date inputs so we can trigger the native picker while showing formatted value
-  const dashboardStartDateRef = useRef<HTMLInputElement | null>(null);
-  const dashboardEndDateRef = useRef<HTMLInputElement | null>(null);
+  const handleDateRangeChange = useCallback((range: { startDate: string; endDate: string }) => {
+    setDateRange(range);
+  }, []);
 
   const formatToYyMmDd = (iso: string) => {
     if (!iso) return '';
@@ -220,7 +252,8 @@ export default function DashboardPage() {
             };
             
             return processedEntry;
-          });
+          })
+          .filter(entry => entry.status !== 'NONE'); // กรองข้อมูลที่มีสถานะ NONE ออก
         
         console.log('Processed entries:', processedEntries.length);
         setEntries(processedEntries);
@@ -302,13 +335,13 @@ export default function DashboardPage() {
 
     // Custom date range filter (if selected)
   let filteredByDate = entries;
-  if (startDate || endDate) {
+  if (dateRange.startDate || dateRange.endDate) {
     filteredByDate = entries.filter(e => {
       if (!e.created_at) return false;
       try {
         const d = e.created_at.toDate();
-        const start = startDate ? new Date(startDate + 'T00:00:00') : null;
-        const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+        const start = dateRange.startDate ? new Date(dateRange.startDate + 'T00:00:00') : null;
+        const end = dateRange.endDate ? new Date(dateRange.endDate + 'T23:59:59') : null;
         if (start && end) return d >= start && d <= end;
         if (start) return d >= start;
         if (end) return d <= end;
@@ -385,24 +418,28 @@ export default function DashboardPage() {
     labels: programAnalytics.map(p => p.label),
     successRates: programAnalytics.map(p => p.successRate),
     avgDurations: programAnalytics.map(p => p.avgTime),
-    totalCounts: programAnalytics.map(p => p.total),
-    weekdays: {
-      labels: weekdays,
-      counts: weekdayCounts
-    }
+    totalCounts: programAnalytics.map(p => p.total)
+  };
+
+  // Prepare weekday data for pie chart
+  const weekdayData = {
+    labels: weekdays,
+    counts: weekdayCounts
   };
 
   if (loading || (role && role !== 'admin')) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-500">
-        <div className="text-blue-900 text-xl font-semibold animate-pulse">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 relative overflow-hidden">
+        <BubbleBackground />
+        <div className="text-blue-900 text-xl font-semibold animate-pulse relative z-10">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-500 p-4">
-      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-10 p-8 flex flex-col items-center border border-white/30 backdrop-blur-xl relative">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-200 to-blue-300 p-4 relative overflow-hidden">
+      <BubbleBackground />
+      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-10 p-8 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10">
         <div className="w-full flex justify-between items-center mb-4">
           <div className="flex-1">
             {/* Empty div to push user controls to the right */}
@@ -410,7 +447,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Link 
               href="/history" 
-              className="px-4 sm:px-6 py-2 rounded-full bg-blue-500 hover:bg-blue-700 text-white font-semibold shadow transition-all text-center text-sm sm:text-base whitespace-nowrap"
+              className="px-4 sm:px-6 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg text-center text-sm sm:text-base whitespace-nowrap"
             >
               History
             </Link>
@@ -424,7 +461,7 @@ export default function DashboardPage() {
               <img 
                 src="/ram-logo.jpg" 
                 alt="RAM Hospital" 
-                className="w-50 h-35 object-contain hover:opacity-90 transition-opacity cursor-pointer"
+                className="w-45 h-35 object-contain hover:opacity-90 transition-opacity cursor-pointer"
               />
             </Link>
           </div>
@@ -437,169 +474,76 @@ export default function DashboardPage() {
           </div>
         </div>
         
-          {/* Date Filter */}
-          <div className="w-full mb-6">
-            <div className="bg-white rounded-xl shadow-lg p-4 md:p-5 flex flex-col gap-3 border border-blue-50">
-              <h3 className="text-sm md:text-base font-bold text-blue-700 mb-1.5 flex items-center gap-1.5">
-                <span className="inline-block text-base">📅</span> กรองข้อมูลตามช่วงวันที่
-              </h3>
-              
-              {/* Quick Date Filter Buttons */}
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                <button
-                  onClick={() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    setStartDate(today);
-                    setEndDate(today);
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors border border-blue-100"
-                >
-                  วันนี้
-                </button>
-                <button
-                  onClick={() => {
-                    const today = new Date();
-                    const firstDayOfWeek = new Date(today);
-                    firstDayOfWeek.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)); // Monday
-                    setStartDate(firstDayOfWeek.toISOString().split('T')[0]);
-                    setEndDate(today.toISOString().split('T')[0]);
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-md transition-colors border border-purple-100"
-                >
-                  สัปดาห์นี้
-                </button>
-                <button
-                  onClick={() => {
-                    const today = new Date();
-                    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                    setStartDate(firstDayOfMonth.toISOString().split('T')[0]);
-                    setEndDate(today.toISOString().split('T')[0]);
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors border border-green-100"
-                >
-                  เดือนนี้
-                </button>
-                <button
-                  onClick={() => {
-                    const today = new Date();
-                    const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
-                    setStartDate(firstDayOfYear.toISOString().split('T')[0]);
-                    setEndDate(today.toISOString().split('T')[0]);
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-md transition-colors border border-yellow-100"
-                >
-                  ปีนี้
-                </button>
+          {/* Date Range Picker - Left Aligned */}
+          <div className="mb-6 w-full">
+            <div className="flex justify-start">
+              <div className="w-auto">
+                <VercelDateRangePicker
+                  onDateRangeChange={handleDateRangeChange}
+                  initialRange={dateRange}
+                />
+              </div>
+            </div>
+          </div>
+        
+
+
+          {/* Small Status Widgets */}
+          <div className="w-full mb-4">
+            <div className="grid grid-cols-3 gap-3">
+              {/* Total Rounds Widget */}
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow-sm p-4 flex flex-col items-center border border-blue-50">
+                <div className="text-3xl font-bold text-blue-600">{totalCount}</div>
+                <div className="text-base font-medium text-blue-700 mb-3">Total Rounds</div>
+                <div className="w-full bg-white/50 rounded-full h-2 overflow-hidden mb-2">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full" 
+                    style={{ width: '100%' }}
+                  ></div>
+                </div>
+                <div className="text-xs text-blue-700/70">All cycles</div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <div className="flex items-center gap-1 w-full">
-                  <div className="relative flex-1">
-                    <button
-                      type="button"
-                      onClick={() => dashboardStartDateRef.current?.showPicker ? dashboardStartDateRef.current.showPicker() : dashboardStartDateRef.current?.click()}
-                      className="w-full text-left px-2 sm:px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs sm:text-sm text-black shadow-sm hover:bg-gray-50 transition-colors"
-                    >
-                      {formatToYyMmDd(startDate) || 'yyyy/mm/dd'}
-                    </button>
-                    <input
-                      ref={dashboardStartDateRef}
-                      type="date"
-                      value={startDate}
-                      onChange={e => setStartDate(e.target.value)}
-                      max={endDate || undefined}
-                      className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <span className="text-gray-500 text-sm font-bold hidden sm:inline">-</span>
+              {/* Passed Widget */}
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow-sm p-4 flex flex-col items-center border border-green-50">
+                <div className="text-3xl font-bold text-green-600">{passedCount}</div>
+                <div className="text-base font-medium text-green-700 mb-3">Passed</div>
+                <div className="w-full bg-white/50 rounded-full h-2 overflow-hidden mb-2">
+                  <div 
+                    className="bg-gradient-to-r from-green-500 to-green-600 h-full rounded-full" 
+                    style={{ width: `${passRate}%` }}
+                  ></div>
                 </div>
-                <div className="flex items-center gap-1 w-full">
-                  <span className="text-gray-500 text-xs font-medium sm:hidden">ถึง</span>
-                  <div className="relative flex-1">
-                    <button
-                      type="button"
-                      onClick={() => dashboardEndDateRef.current?.showPicker ? dashboardEndDateRef.current.showPicker() : dashboardEndDateRef.current?.click()}
-                      className="w-full text-left px-2 sm:px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-xs sm:text-sm text-black shadow-sm hover:bg-gray-50 transition-colors"
-                    >
-                      {formatToYyMmDd(endDate) || 'yyyy/mm/dd'}
-                    </button>
-                    <input
-                      ref={dashboardEndDateRef}
-                      type="date"
-                      value={endDate}
-                      onChange={e => setEndDate(e.target.value)}
-                      min={startDate || undefined}
-                      className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  {(startDate || endDate) && (
-                    <button
-                      className="px-2 sm:px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-xs sm:text-sm shadow transition-all duration-150 whitespace-nowrap"
-                      onClick={() => { setStartDate(''); setEndDate(''); }}
-                    >
-                      ล้าง
-                    </button>
-                  )}
+                <div className="text-xs text-green-700/70">
+                  {Math.min(100, passRate)}% Success
+                </div>
+              </div>
+
+              {/* Failed Widget */}
+              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg shadow-sm p-4 flex flex-col items-center border border-red-50">
+                <div className="text-3xl font-bold text-red-600">{failedCount}</div>
+                <div className="text-base font-medium text-red-700 mb-3">Failed</div>
+                <div className="w-full bg-white/50 rounded-full h-2 overflow-hidden mb-2">
+                  <div 
+                    className="bg-gradient-to-r from-red-500 to-red-600 h-full rounded-full" 
+                    style={{ width: totalCount > 0 ? `${(failedCount / totalCount) * 100}%` : '0%' }}
+                  ></div>
+                </div>
+                <div className="text-xs text-red-700/70">
+                  {totalCount > 0 ? Math.min(100, Math.round((failedCount / totalCount) * 100)) : 0}% Failure
                 </div>
               </div>
             </div>
           </div>
-        {/* Status Widgets - Enhanced */}
-        <div className="w-full mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Total Rounds Widget */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-lg p-4 flex flex-col items-center w-full border border-blue-50">
-              <div className="text-4xl font-extrabold text-blue-600">{totalCount}</div>
-              <div className="text-lg font-medium text-blue-700 mb-3">Total Rounds</div>
-              <div className="w-4/5 bg-white/50 rounded-full h-2.5 overflow-hidden mb-2">
-                <div 
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-full rounded-full" 
-                  style={{ width: '100%' }}
-                ></div>
-              </div>
-              <div className="text-xs text-blue-700/70">All sterilization cycles</div>
-            </div>
-
-            {/* Passed Widget */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-lg p-4 flex flex-col items-center w-full border border-green-50">
-              <div className="text-4xl font-extrabold text-green-600">{passedCount}</div>
-              <div className="text-lg font-medium text-green-700 mb-3">Passed</div>
-              <div className="w-4/5 bg-white/50 rounded-full h-2.5 overflow-hidden mb-2">
-                <div 
-                  className="bg-gradient-to-r from-green-500 to-green-600 h-full rounded-full" 
-                  style={{ width: `${passRate}%` }}
-                ></div>
-              </div>
-              <div className="text-xs text-green-700/70">
-                {Math.min(100, passRate)}% Success Rate
-              </div>
-            </div>
-
-            {/* Failed Widget */}
-            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-lg p-4 flex flex-col items-center w-full border border-red-50">
-              <div className="text-4xl font-extrabold text-red-600">{failedCount}</div>
-              <div className="text-lg font-medium text-red-700 mb-3">Failed</div>
-              <div className="w-4/5 bg-white/50 rounded-full h-2.5 overflow-hidden mb-2">
-                <div 
-                  className="bg-gradient-to-r from-red-500 to-red-600 h-full rounded-full" 
-                  style={{ width: totalCount > 0 ? `${(failedCount / totalCount) * 100}%` : '0%' }}
-                ></div>
-              </div>
-              <div className="text-xs text-red-700/70">
-                {totalCount > 0 ? Math.min(100, Math.round((failedCount / totalCount) * 100)) : 0}% Failure Rate
-              </div>
-            </div>
-          </div>
-
-          
 
           {/* Analytics Chart */}
-          <div className="w-full mb-8">
-            <ProgramAnalyticsChart data={chartData} />
+          <div className="w-full mb-6">
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-blue-50">
+              <div className="w-full" style={{ height: '450px' }}>
+                <ProgramAnalyticsChart data={chartData} weekdayData={weekdayData} />
+              </div>
+            </div>
           </div>
-        </div>
 
         {/* Average Time Card (show only when a single program is selected) */}
         {selectedProgram !== 'ALL' && (() => {
@@ -631,7 +575,9 @@ export default function DashboardPage() {
           ) : null;
         })()}
 
-        {/* Enhanced Program Details Section */}
+
+
+            {/* Enhanced Program Details Section */}
         <div className="w-full mb-12">
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
             {/* Section Header */}
@@ -642,169 +588,113 @@ export default function DashboardPage() {
             >
               <div className="flex items-center">
                 <div className="bg-blue-600 p-2 rounded-lg mr-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
+                
                 </div>
                 <h3 className="text-xl font-bold text-blue-900">รายละเอียดตามโปรแกรม</h3>
               </div>
               <div className="flex items-center">
-                <span className="text-sm font-medium text-blue-700 mr-2">
-                  {isProgramDetailsExpanded ? 'ซ่อนรายละเอียด' : 'แสดงรายละเอียด'}
-                </span>
-                <svg 
-                  className={`w-5 h-5 text-blue-700 transform transition-transform duration-200 ${isProgramDetailsExpanded ? 'rotate-180' : ''}`}
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+              
               </div>
             </button>
             
-            {/* Program Cards Grid */}
-            <div className={`p-6 transition-all duration-300 ease-in-out ${isProgramDetailsExpanded ? 'block' : 'hidden'}`}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {programAnalytics.map((prog, index) => {
-                  const isExpanded = expandedPrograms[prog.label] || false;
-                  const indicatorIcons = {
-                    mechanical: '⚙️',
-                    biological: '🧪',
-                    chemical_external: '🏷️',
-                    chemical_internal: '🏷️'
-                  };
-                  
-                  return (
-                    <div key={index} className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-200">
-                      {/* Program Header */}
-                      <div 
-                        className="p-5 cursor-pointer border-b border-gray-100"
-                        onClick={() => toggleProgram(prog.label)}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-800">{prog.label}</h3>
-                            <p className="text-sm text-gray-500 mt-1">จำนวนรอบทั้งหมด: {prog.total}</p>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+            {/* Program Cards Grid - Horizontal Layout */}
+            <div className="p-6">
+              <div className="overflow-x-auto pb-4">
+                <div className="inline-flex space-x-6 min-w-full">
+                  {programAnalytics.map((prog, index) => {
+                    const indicatorIcons = {
+                      mechanical: '⚙️',
+                      biological: '🧪',
+                      chemical_external: '🏷️',
+                      chemical_internal: '🏷️'
+                    };
+                    
+                    return (
+                      <div key={index} className="flex-none w-80 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-200">
+                        {/* Program Header */}
+                        <div className="p-5 border-b border-gray-100">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h3 className="text-base font-semibold text-gray-800">{prog.label}</h3>
+                              <p className="text-xs text-gray-500 mt-1">จำนวนรอบทั้งหมด: {prog.total}</p>
+                            </div>
+                            <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                               prog.successRate >= 90 ? 'bg-green-100 text-green-800' :
                               prog.successRate >= 70 ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                             }`}>
-                              {Math.min(100, prog.successRate)}% ความสำเร็จ
-                            </div>
-                            <button className="mt-2 text-blue-600 text-sm font-medium flex items-center">
-                              {isExpanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
-                              <svg 
-                                className={`w-4 h-4 ml-1 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none" 
-                                viewBox="0 0 24 24" 
-                                stroke="currentColor"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                        
-                        {/* Progress Bar */}
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>ความสำเร็จ</span>
-                            <span>{Math.min(100, prog.successRate)}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-full rounded-full ${
-                                prog.successRate >= 90 ? 'bg-green-500' :
-                                prog.successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${Math.min(100, prog.successRate)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Collapsible Details */}
-                      <div 
-                        className={`px-5 pb-5 transition-all duration-300 ease-in-out ${isExpanded ? 'block' : 'hidden'}`}
-                        aria-hidden={!isExpanded}
-                      >
-                        <div className="mt-4 space-y-4">
-                          {/* Status Overview */}
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <h4 className="font-medium text-blue-800 mb-2 flex items-center">
-                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                              </svg>
-                              ภาพรวม
-                            </h4>
-                            <div className="grid grid-cols-2 gap-3 mt-2">
-                              <div className="bg-white p-3 rounded-lg shadow-sm">
-                                <div className="text-sm text-gray-500">เวลาเฉลี่ย</div>
-                                <div className="text-xl font-bold text-blue-600">{prog.avgTime} <span className="text-sm font-normal text-gray-500">นาที</span></div>
-                              </div>
-                              <div className="bg-white p-3 rounded-lg shadow-sm">
-                                <div className="text-sm text-gray-500">จำนวนรอบ</div>
-                                <div className="text-xl font-bold text-blue-600">{prog.total} <span className="text-sm font-normal text-gray-500">รอบ</span></div>
-                              </div>
+                              {Math.min(100, prog.successRate)}%
                             </div>
                           </div>
                           
-                          {/* Indicators */}
-                          <div>
-                            <h4 className="font-medium text-gray-700 mb-3">ผลการตรวจสอบ</h4>
-                            <div className="space-y-3">
-                              {[
-                                { key: 'mechanical', label: 'กลไก' },
-                                { key: 'biological', label: 'ชีวภาพ' },
-                                { key: 'chemical_external', label: 'เทปเคมีภายนอก' },
-                                { key: 'chemical_internal', label: 'เทปเคมีภายใน' }
-                              ].map(({ key, label }) => {
-                                const passCount = prog.indicatorStats?.[key]?.pass ?? 0;
-                                const failCount = prog.indicatorStats?.[key]?.fail ?? 0;
-                                const total = passCount + failCount;
-                                const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
-                                
-                                return (
-                                  <div key={key} className="bg-gray-50 p-3 rounded-lg">
-                                    <div className="flex justify-between items-center mb-1">
-                                      <div className="flex items-center">
-                                        <span className="mr-2">{indicatorIcons[key as keyof typeof indicatorIcons]}</span>
-                                        <span className="text-sm font-medium">{label}</span>
-                                      </div>
-                                      <span className={`text-xs font-medium ${
-                                        passRate === 100 ? 'text-green-600' : 'text-yellow-600'
-                                      }`}>
-                                        {Math.min(100, passRate)}%
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center text-xs text-gray-500">
-                                      <span className="text-green-600 font-medium">{passCount} ผ่าน</span>
-                                      <span className="mx-1">•</span>
-                                      <span className="text-red-600 font-medium">{failCount} ไม่ผ่าน</span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                          {/* Progress Bar */}
+                          <div className="mt-3">
+                            <div className="w-full bg-gray-100 rounded-full h-1.5">
+                              <div 
+                                className={`h-full rounded-full ${
+                                  prog.successRate >= 90 ? 'bg-green-500' :
+                                  prog.successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${Math.min(100, prog.successRate)}%` }}
+                              ></div>
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Indicators */}
+                        <div className="p-4 space-y-3">
+                          {[
+                            { key: 'mechanical', label: 'กลไก' },
+                            { key: 'biological', label: 'ชีวภาพ' },
+                            { key: 'chemical_external', label: 'เทปภายนอก' },
+                            { key: 'chemical_internal', label: 'เทปภายใน' }
+                          ].map(({ key, label }) => {
+                            const passCount = prog.indicatorStats?.[key]?.pass ?? 0;
+                            const failCount = prog.indicatorStats?.[key]?.fail ?? 0;
+                            const total = passCount + failCount;
+                            const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
+                            
+                            return (
+                              <div key={key} className="flex items-center justify-between text-sm">
+                                <div className="flex items-center">
+                                  <span className="mr-2 text-base">{indicatorIcons[key as keyof typeof indicatorIcons]}</span>
+                                  <span className="text-gray-700">{label}</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <span className="text-green-600 font-medium text-xs">{passCount} ผ่าน</span>
+                                  <span className="mx-1 text-gray-400">•</span>
+                                  <span className="text-red-600 font-medium text-xs">{failCount} ไม่ผ่าน</span>
+                                  <span className={`ml-2 text-xs font-medium w-10 text-right ${
+                                    passRate === 100 ? 'text-green-600' : passRate > 0 ? 'text-yellow-600' : 'text-gray-400'
+                                  }`}>
+                                    {total > 0 ? `${passRate}%` : '-'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Average Time */}
+                        <div className="border-t border-gray-100 p-3 bg-gray-50">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-600">เวลาเฉลี่ย:</span>
+                            <span className="font-medium text-blue-600">{prog.avgTime} นาที</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </div>         
 
         
                   
       </div>
-      <div className="mt-8 text-white/80 text-center text-sm">
+      <div className="mt-8 text-black text-center text-sm">
         &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use | Thirdlnwza
       </div>
     </div>

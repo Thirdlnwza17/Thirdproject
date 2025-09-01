@@ -6,6 +6,7 @@ import { getFirestore, collection, query, orderBy, onSnapshot, updateDoc, delete
 import { logAuditAction } from '@/dbService';
 import EditLoadModal from './EditLoadModal';
 import SterilizerLoadsCompactView from './SterilizerLoadsCompactView';
+import { VercelDateRangePicker } from '@/components/VercelDateRangePicker';
 
 // Helper function to determine statuses
 export const getStatuses = (load: any) => {
@@ -14,12 +15,24 @@ export const getStatuses = (load: any) => {
                    load.items.length === 0 || 
                    load.items.every((item: any) => !item.quantity || item.quantity === '0' || item.quantity === 0);
   
+  // Check if any test results are selected (ผ่าน or ไม่ผ่าน)
+  const hasTestResults = 
+    load.mechanical === 'ผ่าน' || load.mechanical === 'ไม่ผ่าน' ||
+    load.chemical_external === 'ผ่าน' || load.chemical_external === 'ไม่ผ่าน' ||
+    load.chemical_internal === 'ผ่าน' || load.chemical_internal === 'ไม่ผ่าน' ||
+    load.bio_test === 'ผ่าน' || load.bio_test === 'ไม่ผ่าน';
+  
   // Check for any failed tests
   const hasFailed = 
     load.mechanical === 'ไม่ผ่าน' || 
     load.chemical_external === 'ไม่ผ่าน' || 
     load.chemical_internal === 'ไม่ผ่าน' || 
     load.bio_test === 'ไม่ผ่าน';
+  
+  // If no test results are selected, return None status
+  if (!hasTestResults) {
+    return [{ status: 'None', color: 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200' }];
+  }
   
   // Return statuses based on conditions
   if (isTestRun) {
@@ -58,71 +71,13 @@ export default function SterilizerLoadsCardView({
     endDate: ''
   });
   
-  // Set date range based on filter type (today, week, month, year)
-  const setDateRangeFilter = (type: 'today' | 'week' | 'month' | 'year') => {
-    const today = new Date();
-    const startDate = new Date();
-    
-    switch (type) {
-      case 'today':
-        // Set to today
-        break;
-      case 'week':
-        // Set to start of week (Sunday)
-        const day = today.getDay();
-        const diff = today.getDate() - day + (day === 0 ? -6 : 0); // Adjust for Sunday
-        startDate.setDate(diff);
-        break;
-      case 'month':
-        // Set to first day of month
-        startDate.setDate(1);
-        break;
-      case 'year':
-        // Set to first day of year
-        startDate.setMonth(0, 1);
-        break;
-    }
-
-    // Format dates
-    const formatDatePart = (date: Date) => ({
-      year: date.getFullYear().toString(),
-      month: (date.getMonth() + 1).toString().padStart(2, '0'),
-      day: date.getDate().toString().padStart(2, '0')
-    });
-
-    const start = formatDatePart(startDate);
-    const end = formatDatePart(today);
-
-    const newRange = {
-      startDate: `${start.year}-${start.month}-${start.day}`,
-      endDate: `${end.year}-${end.month}-${end.day}`
-    };
-    
+  // Handle date range change from the Vercel date picker
+  const handleDateRangeChange = (newRange: { startDate: string; endDate: string }) => {
     setDateRange(newRange);
     if (onDateRangeChange) {
       onDateRangeChange(newRange);
     }
   };
-
-  const handleStartDateChange = (value: string) => {
-    const newRange = { ...dateRange, startDate: ensureIso(value) };
-    setDateRange(newRange);
-    if (onDateRangeChange) {
-      onDateRangeChange(newRange);
-    }
-  };
-
-  const handleEndDateChange = (value: string) => {
-    const newRange = { ...dateRange, endDate: ensureIso(value) };
-    setDateRange(newRange);
-    if (onDateRangeChange) {
-      onDateRangeChange(newRange);
-    }
-  };
-  
-  // Refs for native date inputs
-  const startDateInputRef = useRef<HTMLInputElement | null>(null);
-  const endDateInputRef = useRef<HTMLInputElement | null>(null);
   
   // Format ISO (YYYY-MM-DD) to yyyy/mm/dd for display
   const formatToYyMmDd = (iso: string) => {
@@ -144,6 +99,8 @@ export default function SterilizerLoadsCardView({
     setChemicalExternalFilter('');
     setChemicalInternalFilter('');
     setBioTestFilter('');
+    setSortBy('date');
+    setSortOrder('desc');
     setShowAdvancedFilters(false);
     
     if (onDateRangeChange) {
@@ -160,6 +117,8 @@ export default function SterilizerLoadsCardView({
   const [autoclaveSub, setAutoclaveSub] = useState('All');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'date' | 'lastUpdated'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const itemsPerPage = viewMode === 'compact' ? 15 : 6;
   const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
   const cardRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
@@ -284,8 +243,31 @@ export default function SterilizerLoadsCardView({
     return sterileStaff.includes(staffName) || resultReader.includes(staffName);
   };
 
-  // ฟังก์ชัน filter, pagination
-  const filteredLoads = loads.filter(load => {
+  // ฟังก์ชัน  // Sort function based on selected field and order
+  const sortLoads = (a: any, b: any) => {
+    let aValue, bValue;
+    
+    if (sortBy === 'date') {
+      aValue = a.date?.toDate ? a.date.toDate() : (a.date || 0);
+      bValue = b.date?.toDate ? b.date.toDate() : (b.date || 0);
+    } else { // lastUpdated
+      aValue = a.updated_at?.toDate ? a.updated_at.toDate() : (a.updated_at || a.created_at?.toDate?.() || new Date(0));
+      bValue = b.updated_at?.toDate ? b.updated_at.toDate() : (b.updated_at || b.created_at?.toDate?.() || new Date(0));
+    }
+    
+    // Handle cases where values might be undefined
+    if (!aValue && !bValue) return 0;
+    if (!aValue) return sortOrder === 'asc' ? -1 : 1;
+    if (!bValue) return sortOrder === 'asc' ? 1 : -1;
+    
+    // Compare dates
+    if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  };
+
+  // Filter and sort loads
+  const filteredLoads = [...loads].sort(sortLoads).filter(load => {
     // Date range filter
     if (dateRange?.startDate || dateRange?.endDate) {
       const loadDate = load.date || load.test_date;
@@ -519,91 +501,22 @@ export default function SterilizerLoadsCardView({
 
   return (
     <div className="w-full">
-      {/* Date Filter Controls */}
+      {/* Date Range Picker */}
       <div className="mb-4">
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          <button
-            type="button"
-            onClick={() => setDateRangeFilter('today')}
-            className="px-2.5 py-1 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition-colors border border-blue-100"
-          >
-            วันนี้
-          </button>
-          <button
-            type="button"
-            onClick={() => setDateRangeFilter('week')}
-            className="px-2.5 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-md transition-colors border border-purple-100"
-          >
-            สัปดาห์นี้
-          </button>
-          <button
-            type="button"
-            onClick={() => setDateRangeFilter('month')}
-            className="px-2.5 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 rounded-md transition-colors border border-green-100"
-          >
-            เดือนนี้
-          </button>
-          <button
-            type="button"
-            onClick={() => setDateRangeFilter('year')}
-            className="px-2.5 py-1 text-xs font-medium bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-md transition-colors border border-yellow-100"
-          >
-            ปีนี้
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">จากวันที่</label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => startDateInputRef.current?.showPicker?.() || startDateInputRef.current?.click()}
-                className="w-full text-left rounded-md border border-gray-300 bg-white px-2.5 py-1 text-sm shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                {formatToYyMmDd(dateRange.startDate) || 'yyyy/mm/dd'}
-              </button>
-              <input
-                ref={startDateInputRef}
-                type="date"
-                value={dateRange.startDate}
-                onChange={(e) => handleStartDateChange(e.target.value)}
-                className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                aria-hidden="true"
-              />
-            </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="w-full md:w-auto">
+            <VercelDateRangePicker
+              onDateRangeChange={handleDateRangeChange}
+              initialRange={dateRange}
+            />
           </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">ถึงวันที่</label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => endDateInputRef.current?.showPicker?.() || endDateInputRef.current?.click()}
-                className="w-full text-left rounded-md border border-gray-300 bg-white px-2.5 py-1 text-sm shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                {formatToYyMmDd(dateRange.endDate) || 'yyyy/mm/dd'}
-              </button>
-              <input
-                ref={endDateInputRef}
-                type="date"
-                value={dateRange.endDate}
-                onChange={(e) => handleEndDateChange(e.target.value)}
-                className="absolute inset-0 w-0 h-0 opacity-0 pointer-events-none"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={handleClearAllFilters}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md px-2.5 py-1 text-sm shadow-sm hover:shadow transition-colors w-full h-[30px] flex items-center justify-center"
-              type="button"
-            >
-              ล้างตัวกรองทั้งหมด
-            </button>
-          </div>
+          <button
+            onClick={handleClearAllFilters}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-md px-3 py-2 text-sm shadow-sm hover:shadow transition-all duration-300 transform hover:-translate-y-0.5 h-[38px] flex items-center justify-center whitespace-nowrap"
+            type="button"
+          >
+            ล้างตัวกรองทั้งหมด
+          </button>
         </div>
       </div>
       {/* Main Filters */}
@@ -671,7 +584,7 @@ export default function SterilizerLoadsCardView({
         {/* Advanced Filters Toggle */}
         <button
           onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className="flex items-center gap-1 px-2 py-1 text-xs border rounded text-blue-600 hover:bg-blue-50 h-[30px]"
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded text-blue-600 hover:bg-blue-50 h-[30px] transition-all duration-300 transform hover:-translate-y-0.5"
         >
          
           ตัวกรองขั้นสูง
@@ -687,7 +600,7 @@ export default function SterilizerLoadsCardView({
         </button>
 
         <button
-          className="px-2 py-1 text-xs rounded bg-green-500 hover:bg-green-600 text-white font-medium shadow h-[30px] flex items-center"
+          className="px-2 py-1 text-xs rounded bg-green-500 hover:bg-green-600 text-white font-medium shadow h-[30px] flex items-center transition-all duration-300 transform hover:-translate-y-0.5"
           onClick={handleExportCsv}
         >
           ⬇️ Export
@@ -696,7 +609,7 @@ export default function SterilizerLoadsCardView({
 
       {/* Advanced Filters */}
       {showAdvancedFilters && (
-        <div className="bg-gray-50 p-3 rounded-lg mb-4 border border-gray-200 text-sm">
+        <div className="bg-gray-50 p-4 rounded-lg mt-2 mb-4 border border-gray-200">
           <div className="flex flex-wrap items-center gap-2">
             {/* SN Filter */}
             <div className="flex items-center h-[30px]">
@@ -764,6 +677,27 @@ export default function SterilizerLoadsCardView({
                 <option value="ไม่ผ่าน">ไม่ผ่าน</option>
               </select>
             </div>
+            
+            {/* Sort Filters */}
+            <div className="flex items-center h-[30px]">
+              <label className="text-xs font-medium text-gray-700 whitespace-nowrap mr-1">เรียงตาม:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'date' | 'lastUpdated')}
+                className="border rounded px-2 py-1 text-sm text-black bg-white h-full min-w-[100px] ml-1"
+              >
+                <option value="date">วันที่</option>
+                <option value="lastUpdated">อัพเดทล่าสุด</option>
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                className="border rounded px-2 py-1 text-sm text-black bg-white h-full min-w-[80px] ml-1"
+              >
+                <option value="desc">ล่าสุด</option>
+                <option value="asc">เก่าสุด</option>
+              </select>
+            </div>
           </div>
         </div>
       )}
@@ -773,21 +707,19 @@ export default function SterilizerLoadsCardView({
         <div className="flex space-x-2">
           <button
             onClick={() => setViewMode('compact')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 transform hover:-translate-y-0.5 ${
               viewMode === 'compact' 
-                ? 'bg-blue-600 text-white shadow-md' 
-                : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 hover:border-blue-300'
-            }`}
+                ? 'bg-blue-100 text-blue-700 hover:shadow-md' 
+                : 'bg-white text-gray-700 hover:bg-gray-50 hover:shadow'}`}
           >
             แสดงแบบตาราง
           </button>
           <button
             onClick={() => setViewMode('detailed')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 transform hover:-translate-y-0.5 ${
               viewMode === 'detailed' 
-                ? 'bg-purple-600 text-white shadow-md' 
-                : 'bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 hover:border-purple-300'
-            }`}
+                ? 'bg-blue-100 text-blue-700 hover:shadow-md' 
+                : 'bg-white text-gray-700 hover:bg-gray-50 hover:shadow'}`}
           >
             แสดงแบบการ์ด
           </button>
@@ -928,7 +860,7 @@ export default function SterilizerLoadsCardView({
                 <h3 className="text-xl font-bold text-gray-900">รายละเอียดการทำงาน</h3>
                 <button 
                   onClick={() => setSelectedLoad(null)}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="text-gray-500 hover:text-gray-700 transition-colors duration-300 transform hover:-translate-y-0.5"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1022,13 +954,13 @@ export default function SterilizerLoadsCardView({
       <div className="flex justify-between items-center mt-4 px-4 py-2 bg-gray-50 rounded">
         <div className="text-sm text-gray-600">
           {filteredLoads.length > 0 
-            ? `${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, filteredLoads.length)} of ${filteredLoads.length} items`
+            ? `${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, filteredLoads.length)} จาก ${filteredLoads.length} รายการ`
             : 'No items found'}
         </div>
         {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button
-              className="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-50 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow disabled:transform-none"
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
@@ -1038,7 +970,7 @@ export default function SterilizerLoadsCardView({
               {currentPage} / {totalPages}
             </span>
             <button
-              className="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 disabled:opacity-50 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow disabled:transform-none"
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
