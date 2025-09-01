@@ -244,7 +244,7 @@ export default function HistoryFormModal({
               </div>
 
               <div className="font-medium mt-2 text-gray-400">ตัวเชื้อทดสอบชีวภาพ (ปิดใช้งาน)</div>
-              <div className="ml-2 text-gray-400">ผล:
+              <div className="ml-2 text-gray-400">ชีวภาพ:
                 <label className="ml-2 text-gray-400"><input type="radio" name="bio_test" value="ผ่าน" checked={form.bio_test === 'ผ่าน'} disabled /> ผ่าน</label>
                 <label className="ml-2 text-gray-400"><input type="radio" name="bio_test" value="ไม่ผ่าน" checked={form.bio_test === 'ไม่ผ่าน'} disabled /> ไม่ผ่าน</label>
               </div>
