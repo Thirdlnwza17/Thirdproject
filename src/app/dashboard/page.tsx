@@ -587,8 +587,14 @@ export default function DashboardPage() {
               aria-expanded={isProgramDetailsExpanded}
             >
               <div className="flex items-center">
-                <div className="bg-blue-600 p-2 rounded-lg mr-3">
-                
+                <div className="w-5 h-5 mr-3 rounded-full overflow-hidden ring-2 ring-white/60 shadow-sm">
+                  <Image
+                    src="/tux.jpg"
+                    alt="โปรแกรมไอคอน"
+                    width={20}
+                    height={20}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <h3 className="text-xl font-bold text-blue-900">รายละเอียดตามโปรแกรม</h3>
               </div>

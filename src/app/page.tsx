@@ -212,7 +212,7 @@ export default function Home() {
         
         {/* Main Content */}
         <div className="text-center space-y-6 w-full">
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-700 bg-clip-text text-transparent">
             Central Supply Sterile Quality Information System
           </h1>
           
@@ -242,19 +242,37 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center text-gray-500">
             <div className="flex flex-col items-center p-4 rounded-xl hover:bg-blue-50/50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-                <span className="text-blue-600">🏥</span>
+                <Image
+                  src="/image.png"
+                  alt="RAM Hospital"
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 object-contain"
+                />
               </div>
               <span className="font-medium">RAM Hospital</span>
             </div>
             <div className="flex flex-col items-center p-4 rounded-xl hover:bg-blue-50/50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mb-2">
-                <span className="text-indigo-600">📅</span>
+                <Image
+                  src="/OIP.jpg"
+                  alt="2025"
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 object-contain"
+                />
               </div>
               <span className="font-medium">2025</span>
             </div>
             <div className="flex flex-col items-center p-4 rounded-xl hover:bg-blue-50/50 transition-colors">
               <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center mb-2">
-                <span className="text-purple-600">💾</span>
+                <Image
+                  src="/logo-logomark.png"
+                  alt="Firebase"
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 object-contain"
+                />
               </div>
               <span className="font-medium">Firebase</span>
             </div>
