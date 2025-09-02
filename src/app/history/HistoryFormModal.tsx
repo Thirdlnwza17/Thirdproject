@@ -195,8 +195,14 @@ export default function HistoryFormModal({
   // ก่อน return ให้แน่ใจว่า form.items เป็น array 15 ช่องเสมอ
   const items = Array.from({ length: 15 }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl relative max-h-[95vh] flex flex-col p-6 overflow-y-auto text-black">
+    <div 
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-xl shadow-xl w-full max-w-4xl relative max-h-[95vh] flex flex-col p-6 overflow-y-auto text-black"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-2xl"
           onClick={onClose}

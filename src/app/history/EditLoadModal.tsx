@@ -1242,8 +1242,14 @@ export default function EditLoadModal({
   );
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]">
+    <div 
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+      onClick={() => setEditForm(null)}
+    >
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button className="absolute top-4 right-6 text-3xl text-gray-400 hover:text-red-500" onClick={() => setEditForm(null)}>&times;</button>
         <h2 className="text-2xl font-bold text-blue-900 mb-4">แก้ไขข้อมูลรอบการทำงาน</h2>
         <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={handleSubmit}>

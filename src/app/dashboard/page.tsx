@@ -437,9 +437,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-blue-200 to-blue-300 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-start pt-4 relative overflow-hidden bg-transparent">
       <BubbleBackground />
-      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-10 p-8 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10">
+      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-8 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10">
         <div className="w-full flex justify-between items-center mb-4">
           <div className="flex-1">
             {/* Empty div to push user controls to the right */}
