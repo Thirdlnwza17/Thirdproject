@@ -13,7 +13,7 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
-      "@typescript-eslint/no-explicit-any": "off", // ✅ ปิดการห้ามใช้ any
+      "@typescript-eslint/no-explicit-any": "on", 
     },
   },
 ];

@@ -117,7 +117,7 @@ export default function SterilizerLoadsCardView({
   const [autoclaveSub, setAutoclaveSub] = useState('All');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'date' | 'lastUpdated'>('date');
+  const [sortBy, setSortBy] = useState<'date' | 'lastUpdated'>('lastUpdated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const itemsPerPage = viewMode === 'compact' ? 15 : 6;
   const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
@@ -688,6 +688,7 @@ export default function SterilizerLoadsCardView({
               >
                 <option value="date">วันที่</option>
                 <option value="lastUpdated">อัพเดทล่าสุด</option>
+                
               </select>
               <select
                 value={sortOrder}
