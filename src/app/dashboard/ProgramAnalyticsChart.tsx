@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Bar, Pie } from "react-chartjs-2";
+import { TooltipItem, ScriptableContext, Chart } from 'chart.js';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -45,17 +46,39 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
   const [showPieChart, setShowPieChart] = useState(false);
 
   // Calculate total count for percentage calculation
-  const totalCount = data.totalCounts.reduce((sum, count) => sum + count, 0) || 1;
+  const totalCount = data.totalCounts.reduce((sum, count) => sum + count, 0);
   // Calculate percentage for each program
   const percentageCounts = data.totalCounts.map(count => {
+    if (totalCount === 0) return 0;
     const percentage = (count / totalCount) * 100;
     // Ensure at least 5% height for visibility when there's data
     return count > 0 ? Math.max(5, Math.round(percentage)) : 0;
   });
 
-  // Filter out programs with no data
-  const hasData = (index: number) => data.totalCounts[index] > 0;
-  const filteredLabels = data.labels.filter((_, i) => hasData(i));
+  // Check if we have any data to display
+  const hasAnyData = data.totalCounts.some(count => count > 0);
+  
+  // Get all valid indices (where totalCount > 0 or hasAnyData is false)
+  const validIndices: number[] = [];
+  for (let i = 0; i < data.labels.length; i++) {
+    if (data.totalCounts[i] > 0 || !hasAnyData) {
+      validIndices.push(i);
+    }
+  }
+  
+  // If no data, show a single 'no data' label, otherwise show all valid labels
+  const displayLabels = hasAnyData 
+    ? validIndices.map(i => data.labels[i])
+    : ['ไม่มีข้อมูล'];
+  
+  // Helper function to get data with proper fallbacks
+  const getFilteredData = <T extends number | null>(
+    source: T[],
+    defaultValue: T
+  ): T[] => {
+    if (!hasAnyData) return [defaultValue];
+    return validIndices.map(i => (i < source.length ? source[i] : defaultValue));
+  };
   
   // Prepare pie chart data for weekday usage - show all days
   const pieData: ChartData<'pie', number[], string> = {
@@ -140,12 +163,12 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
   };
   
   const barData = {
-    labels: filteredLabels.length > 0 ? filteredLabels : ['โปรแกรม'],
+    labels: displayLabels,
     datasets: [
       {
         label: "อัตราความสำเร็จ (%)",
-        data: data.labels.map((_, i) => hasData(i) ? data.successRates[i] : null),
-        backgroundColor: (context: any) => {
+        data: getFilteredData(data.successRates, 0),
+        backgroundColor: (context: ScriptableContext<'bar'>) => {
           const bgColor = CHART_COLORS.successRate;
           const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
           gradient.addColorStop(0, `${bgColor}cc`);
@@ -165,8 +188,8 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
       },
       {
         label: "สัดส่วนรอบทั้งหมด (%)",
-        data: data.labels.map((_, i) => hasData(i) ? percentageCounts[i] : null),
-        backgroundColor: (context: any) => {
+        data: getFilteredData(percentageCounts, 0),
+        backgroundColor: (context: ScriptableContext<'bar'>) => {
           const bgColor = CHART_COLORS.totalCount;
           const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
           gradient.addColorStop(0, `${bgColor}99`);
@@ -184,8 +207,8 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
       },
       {
         label: "เวลาเฉลี่ย (นาที)",
-        data: data.labels.map((_, i) => hasData(i) ? data.avgDurations[i] : null),
-        backgroundColor: (context: any) => {
+        data: getFilteredData(data.avgDurations, 0),
+        backgroundColor: (context: ScriptableContext<'bar'>) => {
           const bgColor = CHART_COLORS.avgTime;
           const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
           gradient.addColorStop(0, `${bgColor}cc`);
@@ -207,6 +230,23 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
   };
 
   const barOptions: ChartOptions<'bar'> = {
+    // Disable animations when there's no data to prevent chart flickering
+    animation: hasAnyData ? {
+      duration: 1000,
+      onComplete: function(animation: { chart: ChartJS }) {
+        if (!hasAnyData) {
+          const chart = animation.chart;
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#666';
+          ctx.font = '16px Arial';
+          ctx.fillText('ไม่มีข้อมูลในวันที่เลือก', chart.width / 2, chart.height / 2);
+          ctx.restore();
+        }
+      }
+    } : false,
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -231,7 +271,7 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
         borderWidth: 1,
         padding: 8,
         callbacks: {
-          label: function(context: any) {
+          label: function(context: TooltipItem<'bar'>) {
             let label = context.dataset.label || '';
             if (label) {
               label += ': ';
@@ -242,9 +282,9 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
               } else if (label.includes('เวลาเฉลี่ย')) {
                 label += context.parsed.y.toFixed(1) + ' นาที';
               } else if (label.includes('สัดส่วนรอบทั้งหมด')) {
-                const index = context.dataIndex;
-                const actualCount = data.totalCounts[index];
-                const percentage = Math.round((actualCount / totalCount) * 100);
+                const dataIndex = validIndices[context.dataIndex];
+                const actualCount = data.totalCounts[dataIndex];
+                const percentage = totalCount > 0 ? Math.round((actualCount / totalCount) * 100) : 0;
                 label = `สัดส่วน: ${percentage}% (${actualCount} รอบ)`;
               }
             }

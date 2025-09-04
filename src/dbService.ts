@@ -12,6 +12,14 @@ export interface UserData {
   displayName?: string;
   lastLogin?: { toDate: () => Date };
 }
+type TestResult = 'ผ่าน' | 'ไม่ผ่าน';
+
+interface TestData {
+  mechanical?: TestResult;
+  chemical_external?: TestResult;
+  chemical_internal?: TestResult;
+  bio_test?: TestResult;
+}
 
 export type AuditLogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_ATTEMPT';
 
@@ -26,13 +34,13 @@ export interface AuditLogEntry {
   timestamp: Date;
   details: {
     field?: string;
-    oldValue?: any;
-    newValue?: any;
+    oldValue?: string | number | Date | null;
+    newValue?: string | number | Date | null;
     message?: string;
     ip?: string;
     userAgent?: string;
     error?: string;
-    [key: string]: any; // Allow additional properties
+    [key: string]: unknown; // Allow additional properties
   };
 }
 
@@ -52,7 +60,6 @@ export interface SterilizerEntry extends FirestoreDocument {
   duration_min?: number;
   sterilization_time?: string;
   total_duration?: number;
-  attest_table?: any[];
   attest_sn?: string;
   chemical_external?: string | boolean;
   chemical_internal?: string | boolean;
@@ -129,7 +136,7 @@ export async function updateLog(program: string, id: string, data: SterilizerEnt
   await updateDoc(docRef, data);
   
   // Find changed fields
-  const changes: Record<string, { oldValue: any; newValue: any }> = {};
+  const changes: Record<string, { oldValue: string | number | Date | null; newValue: unknown }> = {};
   if (beforeData) {
     Object.keys(data).forEach(key => {
       if (JSON.stringify(beforeData[key]) !== JSON.stringify(data[key as keyof SterilizerEntry])) {
@@ -241,7 +248,7 @@ export async function getUserRole(uid: string): Promise<string> {
 }
 
 // ฟังก์ชันคำนวณสถานะ
-function calculateStatus(data: any): "PASS" | "FAIL" | "NONE" {
+function calculateStatus(data: TestData): "PASS" | "FAIL" | "NONE" {
   // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
   const hasTestResults = 
     data.mechanical === 'ผ่าน' || data.mechanical === 'ไม่ผ่าน' ||
@@ -361,12 +368,16 @@ export async function loginUser(email: string, password: string, selectedUserDat
     );
     
     return { user, role };
-  } catch (error: any) {
-    console.error('Login error:', error);
-    throw new Error(error.message || 'Login failed');
-  }  
+  } catch (error: unknown) {
+    console.error("Login error:", error);
+  
+    if (error instanceof Error) {
+      throw new Error(error.message || "Login failed");
+    }
+  
+    throw new Error("Login failed");
+  }
 }
-
 export function getCurrentUser() {
   return auth.currentUser;
 }
@@ -406,6 +417,28 @@ export async function deleteOcrEntry(id: string) {
   return await deleteDoc(doc(db, "sterilizer_ocr_entries", id));
 }
 
+// Helper function to remove undefined values from an object
+function removeUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.entries(obj).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    if (value === undefined) return acc;
+    
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const cleaned = removeUndefined(value as Record<string, unknown>);
+      if (Object.keys(cleaned).length > 0) {
+        acc[key] = cleaned;
+      }
+    } else if (Array.isArray(value)) {
+      acc[key] = value.map(item => 
+        item && typeof item === 'object' ? removeUndefined(item as Record<string, unknown>) : item
+      );
+    } else {
+      acc[key] = value;
+    }
+    
+    return acc;
+  }, {});
+}
+
 // Log action to audit log
 export async function logAuditAction(
   action: AuditLogAction,
@@ -416,16 +449,19 @@ export async function logAuditAction(
   userRole: string,
   details: {
     field?: string;
-    oldValue?: any;
-    newValue?: any;
+    oldValue?: unknown;
+    newValue?: unknown;
     message?: string;
     ip?: string;
     userAgent?: string;
     error?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }
 ): Promise<void> {
   try {
+    // Clean up the details object by removing undefined values
+    const cleanedDetails = removeUndefined(details);
+    
     await addDoc(collection(db, 'audit_logs'), {
       action,
       entityType,
@@ -434,7 +470,7 @@ export async function logAuditAction(
       userEmail,
       userRole,
       timestamp: Timestamp.now(),
-      details,
+      details: cleanedDetails,
     });
   } catch (error) {
     console.error('Error logging audit action:', error);

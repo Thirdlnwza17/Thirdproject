@@ -17,6 +17,22 @@ import HistoryFormModal from './HistoryFormModal';
 import EditLoadModal from './EditLoadModal';
 import DuplicateModal from './DuplicateModal';
 
+type TestResult = 'ผ่าน' | 'ไม่ผ่าน';
+
+interface CheckboxResults {
+  mechanical?: TestResult;
+  chemical_external?: TestResult;
+  chemical_internal?: TestResult;
+  bio_test?: TestResult;
+}
+
+
+interface DuplicateEntry {
+  image_url: string;
+  extracted_text: string;
+}
+
+
 // User dropdown component
 const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -411,23 +427,7 @@ export default function HistoryPage() {
 
  
 
-  // เปิด modal edit
-  const openEdit = (entry: any) => {
-    setEdit(entry);
-    setEditForm({
-      id: entry.id,
-      test_date: entry.test_date && entry.test_date.toDate ? entry.test_date.toDate().toISOString().slice(0,16) : "",
-      serial_number: entry.serial_number || "",
-      program: entry.program || "",
-      items: entry.items || "",
-      chemical_result: entry.chemical_result || "",
-      biological_result: entry.biological_result || "",
-      sterilization_time: entry.sterilization_time || "",
-      temperature: entry.temperature || "", // เพิ่มบรรทัดนี้
-      operator: entry.operator || "",
-    });
-    setEditError("");
-  };
+  
 
   // handle edit form change
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -509,11 +509,16 @@ export default function HistoryPage() {
         after: updatedData,
       });
       setEdit(null);
-    } catch (err: any) {
-      setEditError(err.message || "เกิดข้อผิดพลาด");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setEditError(err.message || "เกิดข้อผิดพลาด");
+      } else {
+        setEditError("เกิดข้อผิดพลาด");
+      }
     } finally {
       setEditLoading(false);
     }
+    
   };
 
   // delete entry
@@ -561,11 +566,16 @@ export default function HistoryPage() {
         before: beforeData,
       });
       setEdit(null);
-    } catch (err: any) {
-      setEditError(err.message || "เกิดข้อผิดพลาด");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setEditError(err.message || "เกิดข้อผิดพลาด");
+      } else {
+        setEditError("เกิดข้อผิดพลาด");
+      }
     } finally {
       setEditLoading(false);
     }
+    
   };
 
   const handleLogout = async () => {
@@ -573,23 +583,7 @@ export default function HistoryPage() {
     router.replace("/login");
   };
 
-  // เปิด modal edit OCR
-  const openEditOcr = (entry: any) => {
-    setEditOcr(entry);
-    setEditOcrForm({
-      id: entry.id,
-      created_at: entry.created_at && entry.created_at.toDate ? entry.created_at.toDate().toISOString().slice(0,16) : "",
-      serial_number: entry.serial_number || "",
-      program: entry.program || "",
-      chemical_result: entry.chemical_result || "",
-      biological_result: entry.biological_result || "",
-      sterilization_time: entry.sterilization_time || "",
-      temperature: entry.temperature || "",
-      operator: entry.operator || "",
-      extracted_text: entry.extracted_text || "",
-    });
-    setEditOcrError("");
-  };
+ 
   // handle edit OCR form change
   const handleEditOcrChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setEditOcrForm({ ...editOcrForm, [e.target.name]: e.target.value });
@@ -658,11 +652,16 @@ export default function HistoryPage() {
       }
       
       setEditOcr(null);
-    } catch (err: any) {
-      setEditOcrError(err.message || "เกิดข้อผิดพลาด");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setEditOcrError(err.message || "เกิดข้อผิดพลาด");
+      } else {
+        setEditOcrError("เกิดข้อผิดพลาด");
+      }
     } finally {
       setEditOcrLoading(false);
     }
+    
   };
   // delete OCR entry
   const handleDeleteOcr = async () => {
@@ -700,11 +699,16 @@ export default function HistoryPage() {
       // ลบข้อมูลจริง
       await deleteDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
       setEditOcr(null);
-    } catch (err: any) {
-      setEditOcrError(err.message || "เกิดข้อผิดพลาด");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setEditOcrError(err.message || "เกิดข้อผิดพลาด");
+      } else {
+        setEditOcrError("เกิดข้อผิดพลาด");
+      }
     } finally {
       setEditOcrLoading(false);
     }
+    
   };
 
   const checkForDuplicates = async (imageUrl: string, extractedText: string) => {
@@ -726,16 +730,22 @@ export default function HistoryPage() {
     const duplicates = await checkForDuplicates(previewImage, ocrText);
     if (duplicates.length > 0) {
       setDuplicateEntries(duplicates);
-      if (duplicates.some((d: any) => d.image_url === previewImage) && duplicates.some((d: any) => d.extracted_text === ocrText)) {
+    
+      if (
+        duplicates.some((d: DuplicateEntry) => d.image_url === previewImage) &&
+        duplicates.some((d: DuplicateEntry) => d.extracted_text === ocrText)
+      ) {
         setDuplicateType('both');
-      } else if (duplicates.some((d: any) => d.image_url === previewImage)) {
+      } else if (duplicates.some((d: DuplicateEntry) => d.image_url === previewImage)) {
         setDuplicateType('image');
       } else {
         setDuplicateType('text');
       }
+    
       setShowDuplicateModal(true);
       return;
     }
+    
     // No duplicates, proceed with save
     await saveOcrEntry();
   };

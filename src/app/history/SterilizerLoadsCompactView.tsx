@@ -2,14 +2,40 @@
 import React, { useState, useCallback } from 'react';
 import { getStatuses } from './SterilizerLoadsCardView';
 import EditLoadModal from './EditLoadModal';
+import { User } from 'firebase/auth';
+import { Timestamp } from 'firebase/firestore';
+
+// Extend the Firebase User type with our custom properties
+type AppUser = User & {
+  role?: 'admin' | 'operator';
+};
+
+interface SterilizerItem {
+  name: string;
+  quantity: number | string;
+  [key: string]: string | number | boolean; 
+}
+
+interface SterilizerLoad {
+  id: string;
+  date?: string;
+  sterilizer?: string;
+  items?: SterilizerItem[];
+  program?: string;
+  attest_sn?: string;
+  serial_number?: string;
+  updated_at?: Timestamp | Date | string;
+  created_at?: Timestamp | Date | string;
+  [key: string]: string | number | boolean | Date | Timestamp | SterilizerItem[] | undefined;
+}
 
 interface SterilizerLoadsCompactViewProps {
-  loads: any[];
-  onViewDetail: (load: any) => void;
-  user: any;
-  onEditSave: (formData: any) => void;
-  onDelete: (id: string) => void;
-  allLoads: any[];
+  loads: SterilizerLoad[];
+  onViewDetail: (load: SterilizerLoad) => void;
+  user: AppUser;
+  onEditSave: (formData: SterilizerLoad) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  allLoads: SterilizerLoad[];
 }
 
 export default function SterilizerLoadsCompactView({ 
@@ -20,7 +46,7 @@ export default function SterilizerLoadsCompactView({
   onDelete, 
   allLoads 
 }: SterilizerLoadsCompactViewProps) {
-  const [editForm, setEditForm] = useState<any>(null);
+  const [editForm, setEditForm] = useState<SterilizerLoad | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editError, setEditError] = useState("");
@@ -57,6 +83,7 @@ export default function SterilizerLoadsCompactView({
             {loads.map((load) => {
               const statuses = getStatuses(load);
               const mainStatus = statuses[statuses.length - 1]; // Get the most important status
+              const items = load.items || []; // Ensure items is always an array
               
               return (
                 <tr 
@@ -72,18 +99,18 @@ export default function SterilizerLoadsCompactView({
                   </td>
                   <td className="py-2 px-3 border-r border-gray-300"> 
                     <div className="text-xs text-gray-800">
-                      {load.items?.length > 0 ? (
+                      {items.length > 0 ? (
                         <div className="space-y-1">
-                          {load.items
-                            .slice(0, expandedItems[load.id] ? load.items.length : 3)
-                            .map((item: any, idx: number) => (
+                          {items
+                            .slice(0, expandedItems[load.id] ? items.length : 3)
+                            .map((item: SterilizerItem, idx: number) => (
                               <div key={idx} className="flex items-center min-h-[24px]">
                                 <span className="break-words">
                                   {item.name.length > 30 ? `${item.name.substring(0, 30)}...` : item.name}
                                 </span>
                               </div>
                             ))}
-                          {load.items.length > 3 && (
+                          {items.length > 3 && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -92,7 +119,7 @@ export default function SterilizerLoadsCompactView({
                               }}
                               className="text-blue-600 hover:text-blue-800 text-xs mt-1 focus:outline-none"
                             >
-                              {expandedItems[load.id] ? 'แสดงน้อยลง' : `+ แสดงเพิ่มเติม (${load.items.length - 3})`}
+                              {expandedItems[load.id] ? 'แสดงน้อยลง' : `+ แสดงเพิ่มเติม (${items.length - 3})`}
                             </button>
                           )}
                         </div>
@@ -102,16 +129,16 @@ export default function SterilizerLoadsCompactView({
                     </div>
                   </td>
                   <td className="py-2 px-3 border-r border-gray-300"> 
-                    {load.items?.length > 0 ? (
+                    {items.length > 0 ? (
                       <div className="space-y-1">
-                        {load.items
-                          .slice(0, expandedItems[load.id] ? load.items.length : 3)
-                          .map((item: any, idx: number) => (
+                        {items
+                          .slice(0, expandedItems[load.id] ? items.length : 3)
+                          .map((item: SterilizerItem, idx: number) => (
                             <div key={idx} className="min-h-[24px] flex items-center justify-center">
                               <span className="text-[11px]">{item.quantity || 0}</span>
                             </div>
                           ))}
-                        {load.items.length > 3 && (
+                        {items.length > 3 && (
                           <div className="h-5" />
                         )}
                       </div>

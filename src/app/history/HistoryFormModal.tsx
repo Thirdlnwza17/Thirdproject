@@ -28,7 +28,7 @@ export interface FormData {
   items?: Array<{ name: string; quantity: string | number }>;
   
   // For type compatibility with the rest of the application
-  [key: string]: any;
+  [key: string]: string | boolean | number | undefined | Array<{ name: string; quantity: string | number }>;
 }
 
 import { User } from 'firebase/auth';

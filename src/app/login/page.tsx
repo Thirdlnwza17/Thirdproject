@@ -234,7 +234,11 @@ export default function LoginPage() {
       } else {
         router.replace("/history");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Login error:', errorMessage);
+      setError(errorMessage);
+      
       // Log failed login attempt
       if (selectedUser) {
         await logAuditAction(
@@ -246,7 +250,7 @@ export default function LoginPage() {
           selectedUser.role || 'user',
           {
             message: 'เข้าสู่ระบบไม่สำเร็จ',
-            error: err.message,
+            error: errorMessage,
             userAgent: window.navigator.userAgent,
             ip: 'unknown' // In a real app, you'd get this from the request headers
           }

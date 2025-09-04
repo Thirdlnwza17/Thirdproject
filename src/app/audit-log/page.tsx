@@ -1,6 +1,52 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { DocumentData, DocumentSnapshot } from 'firebase/firestore';
+
+interface UserData {
+  fullName: string;
+  email?: string;
+  role: string;
+}
+
+interface ChangeItem {
+  action: string;
+  // Add other properties if they exist in your change items
+}
+
+interface ChangeDetail {
+  oldValue?: unknown;
+  newValue?: unknown;
+  _changes?: ChangeItem[];
+}
+
+interface AuditLogChanges extends Record<string, ChangeDetail | undefined> {
+  sterilizer?: ChangeDetail;
+  date?: ChangeDetail;
+  items?: {
+    _changes?: ChangeItem[];
+  };
+}
+
+interface AuditLogDetails {
+  changes?: AuditLogChanges;
+  items?: {
+    _changes?: ChangeItem[];
+  };
+  _changes?: ChangeItem[];
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId: string;
+  timestamp: { seconds: number; nanoseconds: number } | Date;
+  details: AuditLogDetails;
+  user?: UserData;
+}
+
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -218,6 +264,7 @@ export default function AuditLogPage() {
 
   interface UserData {
     fullName: string;
+    email?: string;
     role: string;
   }
 
@@ -227,12 +274,18 @@ export default function AuditLogPage() {
       try {
         const usersSnapshot = await getDocs(collection(db, 'users'));
         const usersData: Record<string, UserData> = {};
-        usersSnapshot.forEach((doc: any) => {
+        usersSnapshot.forEach((doc: DocumentData) => {
           const userData = doc.data();
+          // Always store both email and fullName
           usersData[doc.id] = {
             fullName: userData.fullName || userData.displayName || userData.email?.split('@')[0] || 'Unknown User',
-            role: userData.role?.toLowerCase() === 'admin' ? 'admin' : 'operator' // Ensure role is either 'admin' or 'operator'
+            email: userData.email,
+            role: userData.role?.toLowerCase() === 'admin' ? 'admin' : 'operator' // Only 'admin' or 'operator' roles
           };
+          // Also store user by email for lookup
+          if (userData.email) {
+            usersData[userData.email] = usersData[doc.id];
+          }
         });
         setUsers(usersData);
       } catch (error) {
@@ -268,18 +321,30 @@ export default function AuditLogPage() {
   }, []);
 
   // Filter logs based on selected filter and search term
-  const filteredLogs = logs.filter(log => {
-    const user = users[log.userId] || { 
-      fullName: log.details.userFullName || log.userEmail, 
-      role: log.userRole || 'operator' 
+  const filteredLogs = logs.map(log => {
+    // First try to find user by ID, then by email
+    const userById = users[log.userId];
+    const userByEmail = log.userEmail ? users[log.userEmail] : null;
+    const user = userById || userByEmail || { 
+      fullName: (log.details as any)?.userFullName || log.userEmail || 'ผู้ใช้ไม่ระบุ',
+      role: log.userRole?.toLowerCase() === 'admin' ? 'admin' : 'operator'
     };
-    const userName = user.fullName || log.userEmail;
-    const userRole = user.role.toLowerCase(); // Ensure consistent case for comparison
+    
+    return {
+      ...log,
+      resolvedUser: {
+        fullName: user.fullName,
+        role: user.role
+      }
+    };
+  }).filter(log => {
+    const userName = log.resolvedUser.fullName.toLowerCase();
+    const userRole = log.resolvedUser.role;
     
     const matchesFilter = filter === 'all' || log.action === filter.toUpperCase();
     const matchesSearch = searchTerm === '' || 
       userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      userRole.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      userRole.includes(searchTerm.toLowerCase()) ||
       log.entityId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (log.details.message && log.details.message.toLowerCase().includes(searchTerm.toLowerCase()));
     
@@ -368,7 +433,7 @@ export default function AuditLogPage() {
   };
 
   // Format values for display
-  const formatValue = (value: any): string => {
+  const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) return 'ไม่ระบุ';
     if (value === '') return 'ว่าง';
     if (typeof value === 'boolean') return value ? 'ผ่าน' : 'ไม่ผ่าน';
@@ -391,23 +456,36 @@ export default function AuditLogPage() {
     // For updates with changed fields
     if (log.action === 'UPDATE' && log.details.changed_fields) {
       const changes = log.details.changed_fields as string[];
+      const changesObj = log.details.changes as AuditLogChanges | undefined;
       const changeMessages: string[] = [];
       let sterilizerInfo = '';
       let dateInfo = '';
 
       // First pass: collect sterilizer and date info if they were changed
-      if (changes.includes('sterilizer')) {
-        const sterilizerChange = log.details.changes?.sterilizer;
-        if (sterilizerChange) {
-          sterilizerInfo = `เครื่องนึ่งหมายเลข ${sterilizerChange.oldValue || 'ไม่ระบุ'} เป็น ${sterilizerChange.newValue || 'ไม่ระบุ'}`;
-        }
+      if (changes.includes('sterilizer') && changesObj?.sterilizer) {
+        const sterilizerChange = changesObj.sterilizer;
+        sterilizerInfo = `เครื่องนึ่งหมายเลข ${sterilizerChange.oldValue || 'ไม่ระบุ'} เป็น ${sterilizerChange.newValue || 'ไม่ระบุ'}`;
       }
       
       if (changes.includes('date')) {
-        const dateChange = log.details.changes?.date;
+        const dateChange = changesObj?.date;
         if (dateChange) {
-          const oldDate = dateChange.oldValue ? format(new Date(dateChange.oldValue), 'yyyy/MM/dd', { locale: th }) : 'ไม่ระบุ';
-          const newDate = dateChange.newValue ? format(new Date(dateChange.newValue), 'yyyy/MM/dd', { locale: th }) : 'ไม่ระบุ';
+          const formatDateValue = (value: unknown): string => {
+            if (!value) return 'ไม่ระบุ';
+            try {
+              // Handle Firestore Timestamp objects
+              if (typeof value === 'object' && value !== null && 'toDate' in value) {
+                return format((value as { toDate: () => Date }).toDate(), 'yyyy/MM/dd', { locale: th });
+              }
+              // Handle string or number timestamps
+              return format(new Date(String(value)), 'yyyy/MM/dd', { locale: th });
+            } catch (e) {
+              return 'ไม่ระบุ';
+            }
+          };
+          
+          const oldDate = formatDateValue(dateChange.oldValue);
+          const newDate = formatDateValue(dateChange.newValue);
           dateInfo = `วันที่ ${oldDate} เป็น ${newDate}`;
         }
       }
@@ -425,8 +503,8 @@ export default function AuditLogPage() {
         // Skip already processed fields
         if (field === 'sterilizer' || field === 'date') return;
         
-        const fieldLabel = fieldLabels[field] || field;
-        const changes = log.details.changes?.[field];
+        const fieldLabel = fieldLabels[field as keyof typeof fieldLabels] || field;
+        const changes = (log.details.changes as Record<string, unknown>)?.[field] as ChangeDetail | undefined;
         
         if (changes) {
           // Special handling for image deletions
@@ -453,21 +531,20 @@ export default function AuditLogPage() {
       });
 
       // Handle items array changes
-      if (log.details.changes?.items) {
-        const itemsChange = log.details.changes.items;
-        if (itemsChange._changes) {
-          const added = itemsChange._changes.filter((c: any) => c.action === 'เพิ่ม').length;
-          const removed = itemsChange._changes.filter((c: any) => c.action === 'ลบ').length;
-          const modified = itemsChange._changes.length - added - removed;
-          
-          const changeParts = [];
-          if (added > 0) changeParts.push(`เพิ่ม ${added} รายการ`);
-          if (removed > 0) changeParts.push(`ลบ ${removed} รายการ`);
-          if (modified > 0) changeParts.push(`แก้ไข ${modified} รายการ`);
-          
-          if (changeParts.length > 0) {
-            changeMessages.push(`อัปเดตรายการอุปกรณ์: ${changeParts.join(', ')}`);
-          }
+      const itemsChange = (log.details.changes as AuditLogChanges)?.items;
+      if (itemsChange?._changes) {
+        const changes = itemsChange._changes;
+        const added = changes.filter((c: ChangeItem) => c.action === 'เพิ่ม').length;
+        const removed = changes.filter((c: ChangeItem) => c.action === 'ลบ').length;
+        const modified = changes.length - added - removed;
+        
+        const changeParts = [];
+        if (added > 0) changeParts.push(`เพิ่ม ${added} รายการ`);
+        if (removed > 0) changeParts.push(`ลบ ${removed} รายการ`);
+        if (modified > 0) changeParts.push(`แก้ไข ${modified} รายการ`);
+        
+        if (changeParts.length > 0) {
+          changeMessages.push(`อัปเดตรายการอุปกรณ์: ${changeParts.join(', ')}`);
         }
       }
 
@@ -477,14 +554,51 @@ export default function AuditLogPage() {
     // For deletes
     if (log.action === 'DELETE') {
       // Check if we have additional details in the log
-      if (log.details && (log.details.sterilizer || log.details.date)) {
+      if (log.details) {
         const details = [];
         if (log.details.sterilizer) {
           details.push(`เครื่องนึ่งหมายเลข ${log.details.sterilizer}`);
         }
         if (log.details.date) {
-          const formattedDate = format(new Date(log.details.date), 'yyyy/MM/dd', { locale: th });
-          details.push(`วันที่ ${formattedDate}`);
+          try {
+            let dateValue: Date | null = null;
+            const dateInput = log.details.date;
+            
+            // Type guard for Firestore Timestamp
+            const isFirestoreTimestamp = (obj: any): obj is { seconds: number; nanoseconds: number } => {
+              return obj && typeof obj === 'object' && 
+                     'seconds' in obj && 
+                     'nanoseconds' in obj &&
+                     typeof obj.seconds === 'number' && 
+                     typeof obj.nanoseconds === 'number';
+            };
+
+            // Type guard for object with toDate method
+            const hasToDateMethod = (obj: any): obj is { toDate: () => Date } => {
+              return obj && typeof obj === 'object' && 
+                     'toDate' in obj && 
+                     typeof obj.toDate === 'function';
+            };
+
+            // Handle different date input types
+            if (dateInput instanceof Date) {
+              dateValue = dateInput;
+            } else if (typeof dateInput === 'string' || typeof dateInput === 'number') {
+              dateValue = new Date(dateInput);
+            } else if (hasToDateMethod(dateInput)) {
+              dateValue = dateInput.toDate();
+            } else if (isFirestoreTimestamp(dateInput)) {
+              // Handle Firestore timestamp
+              dateValue = new Date(dateInput.seconds * 1000 + dateInput.nanoseconds / 1000000);
+            }
+            
+            if (dateValue && !isNaN(dateValue.getTime())) {
+              const formattedDate = format(dateValue, 'yyyy/MM/dd', { locale: th });
+              details.push(`วันที่ ${formattedDate}`);
+            }
+          } catch (e) {
+            console.error('Error formatting date:', e);
+          }
         }
         return `ลบรายการ ${details.join(' ')}`;
       }
@@ -595,10 +709,10 @@ export default function AuditLogPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {users[log.userId]?.fullName || log.userEmail}
+                          {log.resolvedUser.fullName}
                         </div>
-                        <div className="text-sm text-gray-500 capitalize">
-                          {users[log.userId]?.role || log.userRole || 'operator'}
+                        <div className="text-sm text-gray-500">
+                          {log.resolvedUser.role}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

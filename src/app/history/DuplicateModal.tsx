@@ -1,12 +1,13 @@
 'use client';
 
 import React from 'react';
+import { SterilizerEntry } from '@/dbService';
 
 export default function DuplicateModal({ show, onClose, duplicateType, duplicateEntries, onProceedWithSave }: {
   show: boolean,
   onClose: () => void,
   duplicateType: 'image' | 'text' | 'both',
-  duplicateEntries: any[],
+  duplicateEntries: SterilizerEntry[],
   onProceedWithSave: () => void
 }) {
   if (!show) return null;

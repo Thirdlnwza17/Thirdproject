@@ -8,12 +8,33 @@ import EditLoadModal from './EditLoadModal';
 import SterilizerLoadsCompactView from './SterilizerLoadsCompactView';
 import { VercelDateRangePicker } from '@/components/VercelDateRangePicker';
 
+// Type definitions
+interface SterilizerItem {
+  name: string;
+  quantity?: string | number;
+  [key: string]: unknown;
+}
+
+interface SterilizerLoad {
+  items?: SterilizerItem[];
+  mechanical?: string;
+  chemical_external?: string;
+  chemical_internal?: string;
+  bio_test?: string;
+  [key: string]: unknown;
+}
+
+interface StatusType {
+  status: 'None' | 'Pass' | 'Fail' | 'Test Run';
+  color: string;
+}
+
 // Helper function to determine statuses
-export const getStatuses = (load: any) => {
+export const getStatuses = (load: SterilizerLoad): StatusType[] => {
   // Check if it's a test run (no items or all quantities are 0/empty)
   const isTestRun = !load.items || 
                    load.items.length === 0 || 
-                   load.items.every((item: any) => !item.quantity || item.quantity === '0' || item.quantity === 0);
+                   load.items.every((item: SterilizerItem) => !item.quantity || item.quantity === '0' || item.quantity === 0);
   
   // Check if any test results are selected (ผ่าน or ไม่ผ่าน)
   const hasTestResults = 
@@ -31,23 +52,23 @@ export const getStatuses = (load: any) => {
   
   // If no test results are selected, return None status
   if (!hasTestResults) {
-    return [{ status: 'None', color: 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200' }];
+    return [{ status: 'None' as const, color: 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200' }];
   }
   
   // Return statuses based on conditions
   if (isTestRun) {
     const testResultStatus = hasFailed 
-      ? { status: 'Fail', color: 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-100' }
-      : { status: 'Pass', color: 'bg-green-50 hover:bg-green-100 text-green-700 border border-green-100' };
+      ? { status: 'Fail' as const, color: 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-100' }
+      : { status: 'Pass' as const, color: 'bg-green-50 hover:bg-green-100 text-green-700 border border-green-100' };
       
     return [
-      { status: 'Test Run', color: 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-100' },
+      { status: 'Test Run' as const, color: 'bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-100' },
       testResultStatus
     ];
   } else if (hasFailed) {
-    return [{ status: 'Fail', color: 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-100' }];
+    return [{ status: 'Fail' as const, color: 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-100' }];
   } else {
-    return [{ status: 'Pass', color: 'bg-green-50 hover:bg-green-100 text-green-700 border border-green-100' }];
+    return [{ status: 'Pass' as const, color: 'bg-green-50 hover:bg-green-100 text-green-700 border border-green-100' }];
   }
 };
 

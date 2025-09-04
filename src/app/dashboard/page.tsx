@@ -119,7 +119,29 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
 
 
 
-function normalizeStatus(status: any): "PASS" | "FAIL" | "CANCEL" {
+// Type for test results that we expect to work with
+type TestResultValue = 'ผ่าน' | 'ไม่ผ่าน' | string | boolean | undefined;
+
+// Type for objects that can be checked for test results
+type TestResults = {
+  mechanical?: TestResultValue;
+  chemical_external?: TestResultValue;
+  chemical_internal?: TestResultValue;
+  bio_test?: TestResultValue;
+  status?: string | boolean | number;
+  [key: string]: unknown; // Allow additional properties
+};
+
+// Type guard to check if an object has test result fields
+function hasTestResultFields(data: unknown): data is TestResults {
+  if (typeof data !== 'object' || data === null) return false;
+  
+  const testFields = ['mechanical', 'chemical_external', 'chemical_internal', 'bio_test'];
+  return testFields.some(field => field in data);
+}
+
+function normalizeStatus(status: string | boolean | number | undefined | null): "PASS" | "FAIL" | "CANCEL" {
+  if (status === undefined || status === null) return "FAIL";
   if (status === "PASS" || status === "ผ่าน" || status === true || status === 1) return "PASS";
   if (status === "FAIL" || status === "ไม่ผ่าน" || status === false || status === 0) return "FAIL";
   if (status === "CANCEL" || status === "ยกเลิก") return "CANCEL";
@@ -127,31 +149,61 @@ function normalizeStatus(status: any): "PASS" | "FAIL" | "CANCEL" {
 }
 
 // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
-function hasTestResults(data: any): boolean {
+function hasTestResults(data: unknown): boolean {
+  if (!hasTestResultFields(data)) return false;
+  
+  const checkField = (value: TestResultValue | undefined): boolean => {
+    if (value === undefined) return false;
+    if (typeof value === 'boolean') return true;
+    return value === 'ผ่าน' || value === 'ไม่ผ่าน';
+  };
+  
   return (
-    data.mechanical === 'ผ่าน' || data.mechanical === 'ไม่ผ่าน' ||
-    data.chemical_external === 'ผ่าน' || data.chemical_external === 'ไม่ผ่าน' ||
-    data.chemical_internal === 'ผ่าน' || data.chemical_internal === 'ไม่ผ่าน' ||
-    data.bio_test === 'ผ่าน' || data.bio_test === 'ไม่ผ่าน'
+    checkField(data.mechanical) ||
+    checkField(data.chemical_external) ||
+    checkField(data.chemical_internal) ||
+    checkField(data.bio_test)
   );
 }
 
+// Convert a test result value to a normalized string
+const normalizeTestResult = (value: TestResultValue | undefined): string => {
+  if (value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'ผ่าน' : 'ไม่ผ่าน';
+  return value;
+};
+
 // ถ้า indicator ตัวใด "ไม่ผ่าน" ให้ถือว่า FAIL
-function getEntryStatus(data: any): "PASS" | "FAIL" | "CANCEL" | "NONE" {
+function getEntryStatus(data: unknown): "PASS" | "FAIL" | "CANCEL" | "NONE" {
   // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
   if (!hasTestResults(data)) {
     return "NONE";
   }
   
-  if (
-    data.bio_test === "ไม่ผ่าน" ||
-    data.mechanical === "ไม่ผ่าน" ||
-    data.chemical_external === "ไม่ผ่าน" ||
-    data.chemical_internal === "ไม่ผ่าน"
-  ) {
+  // Ensure data has the expected shape
+  if (!hasTestResultFields(data)) {
+    return "NONE";
+  }
+  
+  // Convert all test results to strings for comparison
+  const testResults = {
+    bio_test: normalizeTestResult(data.bio_test),
+    mechanical: normalizeTestResult(data.mechanical),
+    chemical_external: normalizeTestResult(data.chemical_external),
+    chemical_internal: normalizeTestResult(data.chemical_internal)
+  };
+  
+  // Check if any test has failed
+  if (Object.values(testResults).some(result => result === 'ไม่ผ่าน')) {
     return "FAIL";
   }
-  return normalizeStatus(data.status);
+  
+  // If no tests have failed, check the status field
+  const statusValue = typeof data.status === 'boolean' 
+    ? (data.status ? 'PASS' : 'FAIL') 
+    : data.status;
+    
+  return normalizeStatus(statusValue || 'NONE');
 }
 
 export default function DashboardPage() {
@@ -164,7 +216,7 @@ export default function DashboardPage() {
     biological?: string | boolean;
   }
 
-  // Import SterilizerEntry type from dbService
+  // Import the base SterilizerEntry type from dbService
   type SterilizerEntry = import('@/dbService').SterilizerEntry;
   
   // Extend the type to include our computed fields
@@ -174,7 +226,7 @@ export default function DashboardPage() {
     program_name: string;
     created_at: { toDate: () => Date } | undefined;
     checkboxResults: CheckboxResults;
-    attest_table: any[];
+
     created_by: string;
     attest_sn: string;
     [key: string]: unknown; // Allow additional properties
@@ -316,22 +368,7 @@ export default function DashboardPage() {
   // showDetail removed (unused)
 
   // ฟังก์ชันช่วยตรวจสอบค่าที่ถือว่า "ผ่าน"
-  function isPass(val: any) {
-    // For attest table, '-' means pass and '+' means fail
-    if (val === '-') return true;
-    if (val === '+') return false;
-    
-    // For other cases, use the original logic
-    return (
-      val === 'ผ่าน' ||
-      val === 'PASS' ||
-      val === 'checked' ||
-      val === 'success' ||
-      val === true ||
-      val === 'true' ||
-      val === 1
-    );
-  }
+  
 
     // Custom date range filter (if selected)
   let filteredByDate = entries;
@@ -363,21 +400,7 @@ export default function DashboardPage() {
       return e.program_name === selectedProgram;
     });
   }
-  if (selectedIndicators.length > 0) {
-    filteredEntriesNoStatus = filteredEntriesNoStatus.filter(e => {
-      const results: CheckboxResults = e.checkboxResults || {};
-      return selectedIndicators.every(indicator => {
-        const indicatorMap = {
-          'CHEMICAL_EXTERNAL': 'chemical_external',
-          'CHEMICAL_INTERNAL': 'chemical_internal',
-          'MECHANICAL': 'mechanical',
-          'BIOLOGICAL': 'biological'
-        } as const;
-        const indicatorKey = indicatorMap[indicator as keyof typeof indicatorMap];
-        return isPass(results[indicatorKey]);
-      });
-    });
-  }
+  
 
   // Calculate analytics for each program
   const programAnalytics = MAIN_PROGRAMS.concat(AUTOCLAVE_SUBPROGRAMS).map(prog => 
