@@ -479,20 +479,21 @@ export default function SterilizerLoadsCardView({
     }
     // Define CSV headers
     const headers = [
-      "ID",
-      "TestDate",
-      "SerialNumber",
-      "Program",
-      "Items",
-      "ChemicalResult",
-      "BiologicalResult",
-      "SterilizationTime",
-      "Temperature",
-      "Operator"
+      "วันที่",
+      "รอบที่",
+      "SN",
+      "โปรแกรม",
+      "อุปกรณ์",
+      "เทปภายนอก",
+      "เทปภายใน",
+      "กลไก",
+      "ชีวภาพ",
+      "เวลาAttest",
+      "เจ้าหน้าที่",
+      "ผู้อ่านผล"
     ];
     // Map Firestore fields correctly
     const rows = filteredLoads.map(e => [
-      e.id ?? "",
       (
         e.date &&
         typeof e.date === 'object' &&
@@ -500,16 +501,19 @@ export default function SterilizerLoadsCardView({
       )
         ? (e.date as any).toDate().toISOString().slice(0, 10)
         : (typeof e.date === 'string' ? e.date : (e.date ?? "")),
+      e.sterilizer ?? "",
       e.attest_sn ?? e.serial_number ?? "",
       e.program ?? "",
       Array.isArray(e.items)
         ? e.items.map((i: any) => (typeof i === 'string' ? i : (i.name || '')).replace(/"/g, '""')).join(';')
         : (typeof e.items === 'string' ? e.items.replace(/"/g, '""') : ''),
       e.chemical_external ?? "",
+      e.chemical_internal ?? "",
+      e.mechanical ?? "",
       e.bio_test ?? "",
       e.attest_time ?? "",
-      e.temperature ?? "",
-      e.created_by ?? ""
+      e.sterile_staff ?? "",
+      e.result_reader ?? ""
     ]);
     // Convert to CSV string
     const csvContent = '\uFEFF' + [headers, ...rows]

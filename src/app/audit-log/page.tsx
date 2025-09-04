@@ -507,11 +507,18 @@ export default function AuditLogPage() {
         const changes = (log.details.changes as Record<string, unknown>)?.[field] as ChangeDetail | undefined;
         
         if (changes) {
-          // Special handling for image deletions
-          if ((field === 'image_url_1' && changes.newValue === '') || 
-              (field === 'image_url_2' && changes.newValue === '')) {
-            changeMessages.push(`ลบ${fieldLabel}`);
-          } 
+          // Special handling for image changes
+          if (field === 'image_url_1' || field === 'image_url_2') {
+            const imageName = field === 'image_url_1' ? 'Sterile Slip' : 'Attest';
+            if (changes.newValue === '') {
+              changeMessages.push(`ลบรูป ${imageName}`);
+            } else if (changes.oldValue === '') {
+              changeMessages.push(`เพิ่มรูป ${imageName}`);
+            } else if (changes.oldValue !== changes.newValue) {
+              changeMessages.push(`เปลี่ยนรูป ${imageName}`);
+            }
+            return; // Skip further processing for image fields
+          }
           // Special handling for test results (mechanical, chemical, bio_test)
           else if (['mechanical', 'chemical_external', 'chemical_internal', 'bio_test'].includes(field)) {
             const oldVal = formatValue(changes.oldValue);

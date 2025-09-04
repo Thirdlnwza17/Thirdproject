@@ -1298,14 +1298,23 @@ export default function EditLoadModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 overflow-y-auto py-8 touch-auto"
     >
       <div 
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center overflow-y-auto max-h-[98vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-full md:max-w-4xl p-2 sm:p-4 md:p-8 relative flex flex-col items-center my-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <button className="absolute top-4 right-6 text-3xl text-gray-400 hover:text-red-500" onClick={() => setEditForm(null)}>&times;</button>
-        <h2 className="text-2xl font-bold text-blue-900 mb-4">แก้ไขข้อมูลรอบการทำงาน</h2>
+        <div className="w-full mb-4 relative">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-blue-900 inline-block">แก้ไขข้อมูลรอบการทำงาน</h2>
+          </div>
+          <button 
+            className="absolute top-0 right-0 text-3xl text-gray-400 hover:text-red-500 -mt-1 -mr-1" 
+            onClick={() => setEditForm(null)}
+          >
+            &times;
+          </button>
+        </div>
         <form className="w-full flex flex-col gap-4 md:flex-row md:gap-8" onSubmit={handleSubmit}>
           {/* ฟอร์มข้อมูลเหมือน LOAD IN DATA */}
           <div className="flex-1 min-w-[220px] flex flex-col gap-2 text-black">
@@ -1584,9 +1593,19 @@ export default function EditLoadModal({
           <div className="flex-1 flex flex-col gap-4 items-center justify-center min-w-[220px]">
             <div
               tabIndex={0}
-              className="w-full max-w-[95vw] md:max-w-[900px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-hidden relative cursor-pointer"
-              style={{ maxHeight: '60vh', height: '60vh', touchAction: 'none' }}
-              onClick={() => openImageSourceModal(1)}
+              className="w-full max-w-[500px] h-[400px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-y-auto relative cursor-pointer touch-pan-y"
+              onClick={(e) => {
+                // Only open image source modal if the scroll container is not being scrolled
+                if (!e.currentTarget.classList.contains('scrolling')) {
+                  openImageSourceModal(1);
+                }
+              }}
+              onTouchStart={() => {
+                // Add a small delay to prevent immediate click when scrolling
+                const container = document.querySelector('[onclick*="openImageSourceModal(1)"]');
+                container?.classList.add('scrolling');
+                setTimeout(() => container?.classList.remove('scrolling'), 200);
+              }}
             >
               {image1 ? (
                 <img
@@ -1596,6 +1615,7 @@ export default function EditLoadModal({
                   style={{
                     width: '100%',
                     height: '100%',
+                    objectPosition: 'top center',
                     maxWidth: '95vw',
                     maxHeight: '60vh',
                     userSelect: 'none',
@@ -1792,9 +1812,19 @@ export default function EditLoadModal({
             </div>
             <div
               tabIndex={0}
-              className="w-full max-w-[95vw] md:max-w-[900px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-hidden relative cursor-pointer"
-              style={{ maxHeight: '60vh', height: '60vh', touchAction: 'none' }}
-              onClick={() => openImageSourceModal(2)}
+              className="w-full max-w-[500px] h-[400px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-y-auto relative cursor-pointer touch-pan-y"
+              onClick={(e) => {
+                // Only open image source modal if the scroll container is not being scrolled
+                if (!e.currentTarget.classList.contains('scrolling')) {
+                  openImageSourceModal(2);
+                }
+              }}
+              onTouchStart={() => {
+                // Add a small delay to prevent immediate click when scrolling
+                const container = document.querySelector('[onclick*="openImageSourceModal(2)"]');
+                container?.classList.add('scrolling');
+                setTimeout(() => container?.classList.remove('scrolling'), 200);
+              }}
             >
               {editForm.image_url_2 ? (
                 <img
@@ -1804,6 +1834,7 @@ export default function EditLoadModal({
                   style={{
                     width: '100%',
                     height: '100%',
+                    objectPosition: 'top center',
                     maxWidth: '95vw',
                     maxHeight: '60vh',
                     userSelect: 'none',
