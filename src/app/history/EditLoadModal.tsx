@@ -60,6 +60,7 @@ export default function EditLoadModal({
   const [showPickerModal, setShowPickerModal] = useState(false);
   const [showWebcamModal, setShowWebcamModal] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // OCR loading / progress
@@ -1136,7 +1137,10 @@ export default function EditLoadModal({
               if (!isMobile && hasGetUserMedia) {
                 // open webcam modal
                 try {
-                  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                  const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: facingMode },
+                    audio: false 
+                  });
                   setWebcamStream(stream);
                   // show modal first, video element will be attached in useEffect
                   setShowWebcamModal(true);
@@ -1211,6 +1215,36 @@ export default function EditLoadModal({
     setShowWebcamModal(false);
   };
 
+  // Switch between front and back camera
+  const switchCamera = async () => {
+    if (!videoRef.current) return;
+    
+    // Stop current stream
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(track => track.stop());
+    }
+    
+    try {
+      // Toggle between front and back camera
+      const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+      setFacingMode(newFacingMode);
+      
+      // Start new stream with the other camera
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacingMode },
+        audio: false
+      });
+      
+      setWebcamStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Error switching camera:', err);
+      alert('ไม่สามารถสลับกล้องได้ กรุณาตรวจสอบการอนุญาตการใช้งานกล้อง');
+    }
+  };
+
   // Attach stream to video element when webcam modal opens
   useEffect(() => {
     if (showWebcamModal && webcamStream && videoRef.current) {
@@ -1230,11 +1264,32 @@ export default function EditLoadModal({
         <div className="relative bg-black rounded-lg overflow-hidden">
           <video ref={videoRef} autoPlay playsInline className="w-full h-auto" />
           <canvas ref={canvasRef} className="hidden" />
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex justify-center space-x-4">
-            <button onClick={captureFromWebcam} className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white">
-              <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
-            </button>
-            <button onClick={closeWebcamModal} className="px-3 py-1 bg-red-500 text-white rounded">ยกเลิก</button>
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex flex-col items-center space-y-4">
+            <div className="flex justify-center space-x-4 w-full">
+              <button 
+                onClick={captureFromWebcam} 
+                className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white flex-shrink-0"
+              >
+                <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
+              </button>
+            </div>
+            <div className="flex justify-between w-full px-4">
+              <button 
+                onClick={closeWebcamModal} 
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={switchCamera}
+                className="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition-colors"
+                title="สลับกล้อง"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
