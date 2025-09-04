@@ -55,7 +55,7 @@ const ProgramAnalyticsChart: React.FC<Props> = ({ data, weekdayData }) => {
     return count > 0 ? Math.max(5, Math.round(percentage)) : 0;
   });
 
-  // Check if we have any data to display
+  // Check if we have  data to display
   const hasAnyData = data.totalCounts.some(count => count > 0);
   
   // Get all valid indices (where totalCount > 0 or hasAnyData is false)

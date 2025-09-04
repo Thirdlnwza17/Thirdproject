@@ -326,7 +326,7 @@ export default function AuditLogPage() {
     const userById = users[log.userId];
     const userByEmail = log.userEmail ? users[log.userEmail] : null;
     const user = userById || userByEmail || { 
-      fullName: (log.details as any)?.userFullName || log.userEmail || 'ผู้ใช้ไม่ระบุ',
+      fullName: (log.details as AuditLogDetails & { userFullName?: string })?.userFullName || log.userEmail || 'ผู้ใช้ไม่ระบุ',
       role: log.userRole?.toLowerCase() === 'admin' ? 'admin' : 'operator'
     };
     
@@ -565,19 +565,21 @@ export default function AuditLogPage() {
             const dateInput = log.details.date;
             
             // Type guard for Firestore Timestamp
-            const isFirestoreTimestamp = (obj: any): obj is { seconds: number; nanoseconds: number } => {
-              return obj && typeof obj === 'object' && 
-                     'seconds' in obj && 
-                     'nanoseconds' in obj &&
-                     typeof obj.seconds === 'number' && 
-                     typeof obj.nanoseconds === 'number';
+            const isFirestoreTimestamp = (obj: unknown): obj is { seconds: number; nanoseconds: number } => {
+              return obj !== null && 
+                     typeof obj === 'object' && 
+                     'seconds' in (obj as object) && 
+                     'nanoseconds' in (obj as object) &&
+                     typeof (obj as { seconds: unknown }).seconds === 'number' && 
+                     typeof (obj as { nanoseconds: unknown }).nanoseconds === 'number';
             };
 
             // Type guard for object with toDate method
-            const hasToDateMethod = (obj: any): obj is { toDate: () => Date } => {
-              return obj && typeof obj === 'object' && 
-                     'toDate' in obj && 
-                     typeof obj.toDate === 'function';
+            const hasToDateMethod = (obj: unknown): obj is { toDate: () => Date } => {
+              return obj !== null && 
+                     typeof obj === 'object' && 
+                     'toDate' in (obj as object) && 
+                     typeof (obj as { toDate: unknown }).toDate === 'function';
             };
 
             // Handle different date input types

@@ -193,7 +193,7 @@ function getEntryStatus(data: unknown): "PASS" | "FAIL" | "CANCEL" | "NONE" {
     chemical_internal: normalizeTestResult(data.chemical_internal)
   };
   
-  // Check if any test has failed
+  // Check if  test has failed
   if (Object.values(testResults).some(result => result === 'ไม่ผ่าน')) {
     return "FAIL";
   }
@@ -352,7 +352,7 @@ export default function DashboardPage() {
       const userId = currentUser?.uid || '';
       const userEmail = currentUser?.email || 'unknown';
       
-      // Unsubscribe from any listeners
+      // Unsubscribe from  listeners
       if (unsubEntriesRef.current) unsubEntriesRef.current();
       
       // Sign out using the service which will handle audit logging
