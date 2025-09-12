@@ -65,7 +65,16 @@ export default function SterilizerLoadsCompactView({
           <span className="block sm:inline">{editError}</span>
         </div>
       )}
-      <div className="overflow-x-auto border border-gray-400 rounded-lg shadow-sm">
+      {loads.length === 0 ? (
+        <div className="border border-gray-400 rounded-lg shadow-sm p-8 text-center text-gray-500">
+          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-700">ไม่พบข้อมูล</h3>
+          <p className="mt-1 text-sm text-gray-500">NO DATA HERE</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-gray-400 rounded-lg shadow-sm">
         <table className="min-w-full bg-white divide-y divide-gray-400">
           <thead>
             <tr className="bg-gray-100">
@@ -74,13 +83,28 @@ export default function SterilizerLoadsCompactView({
               <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400">รายการอุปกรณ์</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-16">จำนวน</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-24">โปรแกรม</th>
-              <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400">สถานะ</th>
+              <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-32">สถานะ</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-20">SN</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-36">อัพเดทล่าสุด</th>
             </tr>
           </thead>
           <tbody>
-            {loads.map((load) => {
+            {loads.length === 0 ? (
+              // Show 8 empty rows when no data
+              Array.from({ length: 8 }).map((_, index) => (
+                <tr key={`empty-${index}`} className="border-b border-gray-300 h-12">
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300 text-center">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300 text-center">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300 text-center">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 border-r border-gray-300 text-center">-</td>
+                  <td className="py-2 px-3 text-sm text-gray-400 text-center">-</td>
+                </tr>
+              ))
+            ) : (
+              loads.map((load) => {
               const statuses = getStatuses(load);
               const mainStatus = statuses[statuses.length - 1]; // Get the most important status
               const items = load.items || []; // Ensure items is always an array
@@ -106,7 +130,7 @@ export default function SterilizerLoadsCompactView({
                             .map((item: SterilizerItem, idx: number) => (
                               <div key={idx} className="flex items-center min-h-[24px]">
                                 <span className="break-words">
-                                  {item.name.length > 30 ? `${item.name.substring(0, 30)}...` : item.name}
+                                  {item.name.length > 40 ? `${item.name.substring(0, 40)}...` : item.name}
                                 </span>
                               </div>
                             ))}
@@ -150,11 +174,11 @@ export default function SterilizerLoadsCompactView({
                     {load.program || '-'}
                   </td>
                   <td className="py-2 px-3 border-r border-gray-300"> 
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                       {statuses.map((status, idx) => (
                         <span 
                           key={idx}
-                          className={`${status.color} text-xs px-2.5 py-1 rounded-md font-medium transition-colors`}
+                          className={`${status.color} text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors`}
                         >
                           {status.status}
                         </span>
@@ -191,10 +215,12 @@ export default function SterilizerLoadsCompactView({
                   </td>
                 </tr>
               );
-            })}
+            })
+            )}
           </tbody>
         </table>
       </div>
+      )}
       
       {editForm && (
         <EditLoadModal

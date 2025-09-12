@@ -992,7 +992,7 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-start pt-4 relative overflow-hidden bg-transparent">
       <BubbleBackground />
-      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10">
+      <div className="w-full max-w-6xl bg-white/90 rounded-3xl shadow-2xl mt-4 p-6 flex flex-col items-center border border-white/30 backdrop-blur-xl relative z-10 min-h-[75vh]">
         <div className="w-full flex flex-col sm:flex-row gap-3 items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <Link href="/dashboard">

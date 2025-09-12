@@ -6,27 +6,17 @@ import {
   getAllLogs,
   getLog,
   getAllLogsFromAll,
-  addSterilizerEntry,
   updateSterilizerEntry,
   deleteSterilizerEntry,
-  subscribeSterilizerEntries,
   addOcrEntry,
   updateOcrEntry,
   deleteOcrEntry,
-  checkOcrDuplicate,
-  subscribeOcrEntries,
   fetchAllUsers,
   getUserRole,
   loginUser,
   getCurrentUser,
   signOutUser,
-  getAuditLogs,
-  subscribeToAuditLogs,
-  logAuditAction,
-  SterilizerEntry,
-  UserData,
-  AuditLogAction,
-  AuditLogEntry
+  getAuditLogs
 } from '@/dbService';
 
 export async function GET(request: NextRequest) {
@@ -88,18 +78,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(user);
       }
       
-      case 'check-ocr-duplicate': {
-        const imageUrl = searchParams.get('imageUrl');
-        const extractedText = searchParams.get('extractedText');
-        if (!imageUrl || !extractedText) {
-          return NextResponse.json(
-            { error: 'imageUrl and extractedText are required' },
-            { status: 400 }
-          );
-        }
-        const isDuplicate = await checkOcrDuplicate(imageUrl, extractedText);
-        return NextResponse.json({ isDuplicate });
-      }
+     
       
       default:
         return NextResponse.json(
@@ -140,19 +119,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ id: logId, ...data }, { status: 201 });
       }
       
-      case 'add-sterilizer-entry': {
-        const { data } = payload;
-        if (!data) {
-          return NextResponse.json(
-            { error: 'Data is required' },
-            { status: 400 }
-          );
-        }
-        const docRef = await addSterilizerEntry(data);
-        return NextResponse.json({ id: docRef.id, ...data }, { status: 201 });
-      }
-      
-      case 'add-ocr-entry': {
+        case 'add-ocr-entry': {
         const { data } = payload;
         if (!data) {
           return NextResponse.json(

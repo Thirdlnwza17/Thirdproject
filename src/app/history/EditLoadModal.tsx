@@ -1727,7 +1727,7 @@ export default function EditLoadModal({
                         const normalized = parseDurationToMinutes(e.target.value);
                         setEditForm({ ...editForm, total_duration: normalized });
                       }}
-                      placeholder="From sterile slip"
+                      placeholder=""
                     />
                     <span className="text-black">นาที</span>
                   </span>

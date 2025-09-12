@@ -1,9 +1,9 @@
-// dbService.ts
+
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc, limit, where } from 'firebase/firestore';
 import { signInWithEmailAndPassword, updateProfile, User as FirebaseUser, onAuthStateChanged as firebaseAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
-// User-related interfaces and types
+
 export interface UserData {
   id: string;
   email: string;
@@ -27,7 +27,6 @@ export interface AuditLogEntry {
   id?: string;
   action: AuditLogAction;
   entityType: string;
-  entityId: string;
   userId: string;
   userEmail: string;
   userRole: string;
@@ -40,11 +39,11 @@ export interface AuditLogEntry {
     ip?: string;
     userAgent?: string;
     error?: string;
-    [key: string]: unknown; // Allow additional properties
+    [key: string]: unknown; 
   };
 }
 
-// Base interface for Firestore document data
+
 export interface FirestoreDocument {
   id: string;
   [key: string]: unknown;
@@ -57,7 +56,6 @@ export interface SterilizerEntry extends FirestoreDocument {
   program?: string;
   created_at?: { toDate: () => Date };
   created_by?: string;
-  duration_min?: number;
   sterilization_time?: string;
   total_duration?: number;
   attest_sn?: string;
@@ -82,7 +80,6 @@ export function getColByProgram(program: string): string | null {
   return null;
 }
 
-// CREATE
 export async function createLog(program: string, data: SterilizerEntry, userId: string = '', userEmail: string = 'system', userRole: string = 'system') {
   const col = getColByProgram(program);
   if (!col) throw new Error('Invalid program type');
@@ -109,7 +106,7 @@ export async function createLog(program: string, data: SterilizerEntry, userId: 
   return docRef.id;
 }
 
-// READ ALL (optionally with order)
+
 export async function getAllLogs(col: string) {
   const q = query(collection(db, col), orderBy('created_at', 'desc'));
   const snap = await getDocs(q);
@@ -191,7 +188,7 @@ export async function deleteLog(program: string, id: string, userId: string = ''
   );
 }
 
-// Utility: get all logs from all collections (for All filter)
+
 export async function getAllLogsFromAll() {
   const colNames = [...Object.values(COLLECTIONS), 'sterilizer_loads'];
   const results = await Promise.all(colNames.map(async col => {
@@ -202,28 +199,7 @@ export async function getAllLogsFromAll() {
   return results.flat();
 } 
 
-// --- เพิ่มฟังก์ชันสำหรับใช้งานใน history/page.tsx ---
 
-// Subscribe to manual entries
-export function subscribeSterilizerEntries(callback: (entries: SterilizerEntry[]) => void) {
-  const q = query(collection(db, "sterilizer_entries"), orderBy("test_date", "desc"));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SterilizerEntry));
-  });
-}
-
-// Subscribe to OCR entries
-export function subscribeOcrEntries(callback: (entries: SterilizerEntry[]) => void) {
-  const q = query(collection(db, "sterilizer_ocr_entries"), orderBy("created_at", "desc"));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SterilizerEntry));
-  });
-}
-
-// Add manual entry
-export async function addSterilizerEntry(data: SterilizerEntry) {
-  return await addDoc(collection(db, "sterilizer_entries"), data);
-}
 
 // Update manual entry
 export async function updateSterilizerEntry(id: string, data: SterilizerEntry) {
@@ -557,15 +533,3 @@ export function subscribeToAuditLogs(
   return unsubscribe;
 }
 
-// Check for duplicate OCR entry
-export async function checkOcrDuplicate(imageUrl: string, extractedText: string) {
-  const q = query(collection(db, "sterilizer_ocr_entries"), orderBy("created_at", "desc"));
-  const snapshot = await getDocs(q);
-  const existingEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as SterilizerEntry[];
-  const duplicates = existingEntries.filter(entry => {
-    const imageMatch = entry.image_url === imageUrl;
-    const textMatch = entry.extracted_text === extractedText;
-    return imageMatch || textMatch;
-  });
-  return duplicates;
-} 

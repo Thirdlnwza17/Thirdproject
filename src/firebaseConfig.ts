@@ -1,4 +1,4 @@
-// src/firebaseConfig.ts
+
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
@@ -12,7 +12,7 @@ const firebaseConfig = {
     messagingSenderId: "544281812264",
     appId: "1:544281812264:web:9179294cca6908f8d5441d",
     measurementId: "G-5QD8XV01XR"
-  // ...อื่นๆ จาก Firebase Console
+
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];

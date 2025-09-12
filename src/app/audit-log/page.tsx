@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { DocumentData, DocumentSnapshot } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { DocumentData } from 'firebase/firestore';
 
 interface UserData {
   fullName: string;
@@ -33,17 +33,6 @@ interface AuditLogDetails {
     _changes?: ChangeItem[];
   };
   _changes?: ChangeItem[];
-}
-
-interface AuditLog {
-  id: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  userId: string;
-  timestamp: { seconds: number; nanoseconds: number } | Date;
-  details: AuditLogDetails;
-  user?: UserData;
 }
 
 import { useRouter } from 'next/navigation';
@@ -98,13 +87,13 @@ interface Bubble {
 const ITEMS_PER_PAGE = 10;
 
 export default function AuditLogPage() {
-  const router = useRouter();
+  // Removed unused router
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const bubblesRef = useRef<Bubble[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [users, setUsers] = useState<Record<string, { fullName: string, role: string }>>({});
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -317,7 +306,6 @@ export default function AuditLogPage() {
     const matchesSearch = searchTerm === '' || 
       userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       userRole.includes(searchTerm.toLowerCase()) ||
-      log.entityId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (log.details.message && log.details.message.toLowerCase().includes(searchTerm.toLowerCase()));
     
     return matchesFilter && matchesSearch;
@@ -357,18 +345,7 @@ export default function AuditLogPage() {
     }
   };
 
-  const getEntityType = (type: string) => {
-    switch (type) {
-      case 'sterilizer_loads':
-        return 'รายการทำความสะอาด';
-      case 'users':
-        return 'ผู้ใช้';
-      case 'settings':
-        return 'การตั้งค่าระบบ';
-      default:
-        return type;
-    }
-  };
+  // Removed unused getEntityType function
 
   const fieldLabels: Record<string, string> = {
     program: 'โปรแกรมการนึ่งฆ่าเชื้อ',
@@ -437,7 +414,7 @@ export default function AuditLogPage() {
                 return format((value as { toDate: () => Date }).toDate(), 'yyyy/MM/dd', { locale: th });
               }
               return format(new Date(String(value)), 'yyyy/MM/dd', { locale: th });
-            } catch (e) {
+            } catch (_) {
               return 'ไม่ระบุ';
             }
           };
