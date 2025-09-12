@@ -291,22 +291,30 @@ export default function AuditLogPage() {
       role: log.userRole?.toLowerCase() === 'admin' ? 'admin' : 'operator'
     };
     
+    // Create a searchable string that includes all relevant fields
+    const searchableText = [
+      user.fullName,
+      user.role,
+      log.action,
+      log.details.message || '',
+      log.entityType || '',
+      JSON.stringify(log.details.changes || {}),
+      JSON.stringify(log.details.changed_fields || []),
+      log.timestamp ? new Date(log.timestamp).toLocaleString('th-TH') : ''
+    ].join(' ').toLowerCase();
+    
     return {
       ...log,
       resolvedUser: {
         fullName: user.fullName,
         role: user.role
-      }
+      },
+      searchableText
     };
   }).filter(log => {
-    const userName = log.resolvedUser.fullName.toLowerCase();
-    const userRole = log.resolvedUser.role;
-    
     const matchesFilter = filter === 'all' || log.action === filter.toUpperCase();
     const matchesSearch = searchTerm === '' || 
-      userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      userRole.includes(searchTerm.toLowerCase()) ||
-      (log.details.message && log.details.message.toLowerCase().includes(searchTerm.toLowerCase()));
+      log.searchableText.includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
