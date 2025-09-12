@@ -1004,10 +1004,6 @@ export default function EditLoadModal({
     }
   }, [editForm.program, setEditForm]);
 
-  // Attest image is tracked directly on editForm.image_url_2; no local state required
-
-  // attest table interactions removed (unused in current UI); attest values persisted on editForm when set via OCR
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -1193,9 +1189,7 @@ export default function EditLoadModal({
     }
   };
 
-  // Removed stream-based capture; use native file input capture and existing handleUpload
-
-  // Open the picker modal for the selected image slot (choose camera or gallery)
+  
   const openImageSourceModal = (idx: 1 | 2) => {
     setCurrentImageIdx(idx);
     setShowPickerModal(true);
@@ -1237,11 +1231,6 @@ export default function EditLoadModal({
     return jpegFile;
   };
 
-  // Image source selection handled via native file inputs (openImageSourceModal triggers inputs)
-
-  // No camera stream cleanup needed after refactor to native capture inputs.
-
-  // ดึงข้อมูลผู้ใช้จาก Firestore
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -1277,9 +1266,7 @@ export default function EditLoadModal({
     fetchUsers();
   }, [user]);
 
-  // Removed ImageSourceModal and CameraModal components - using native capture via file input
-
-  // Modal that appears when user clicks an image area, to choose camera or gallery
+  
   const ImagePickerModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-80">
@@ -1338,7 +1325,6 @@ export default function EditLoadModal({
     </div>
   );
 
-  // Capture image from webcam video, convert to JPEG file and run OCR
   const captureFromWebcam = async () => {
     if (!videoRef.current || !canvasRef.current || !currentImageIdx) return;
     const video = videoRef.current;
@@ -1354,14 +1340,13 @@ export default function EditLoadModal({
     const blob = await (await fetch(dataUrl)).blob();
     const file = new File([blob], `webcam_${Date.now()}.jpg`, { type: 'image/jpeg' });
 
-    // Stop stream
     if (webcamStream) {
       webcamStream.getTracks().forEach(t => t.stop());
       setWebcamStream(null);
     }
     setShowWebcamModal(false);
 
-    // Pass to handleUpload
+
     await handleUpload(currentImageIdx, file);
   };
 
@@ -1373,29 +1358,82 @@ export default function EditLoadModal({
     setShowWebcamModal(false);
   };
 
-  // Switch between front and back camera
+ 
   const switchCamera = async () => {
     if (!videoRef.current) return;
     
-    // Stop current stream
     if (webcamStream) {
       webcamStream.getTracks().forEach(track => track.stop());
     }
     
     try {
-      // Toggle between front and back camera
+     
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
       setFacingMode(newFacingMode);
       
-      // Start new stream with the other camera
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode },
+      // Get supported constraints first
+      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
+      
+      // Enhanced video constraints for better focus and quality
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: newFacingMode,
+          // Request HD resolution if available
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          // Ensure good frame rate
+          frameRate: { ideal: 30, min: 24 },
+        },
         audio: false
-      });
+      };
+      
+      // Add focus mode if supported
+      if ('focusMode' in supportedConstraints) {
+        (constraints.video as any).focusMode = 'continuous';
+      }
+      
+      // For iOS devices, use specific settings
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        (constraints.video as any).facingMode = { exact: newFacingMode };
+        // iOS specific optimizations
+        (constraints.video as any).deviceId = undefined; // Let the system choose the best camera
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Apply additional focus settings after stream is active
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && 'applyConstraints' in videoTrack) {
+        try {
+          // Some browsers support focusDistance for manual focus control
+          if ('focusDistance' in supportedConstraints) {
+            await videoTrack.applyConstraints({
+              advanced: [{ focusDistance: 0 }] as any
+            });
+          }
+        } catch (err) {
+          console.warn('Could not apply focus constraints:', err);
+        }
+      }
       
       setWebcamStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        
+        // Add a small delay and then trigger focus
+        setTimeout(async () => {
+          if (videoTrack && 'applyConstraints' in videoTrack) {
+            try {
+              // Try to set focus to infinity for better focus
+              await videoTrack.applyConstraints({
+                advanced: [{ focusDistance: 0 }] as any
+              });
+            } catch (err) {
+              console.warn('Could not adjust focus:', err);
+            }
+          }
+        }, 1000);
       }
     } catch (err) {
       console.error('Error switching camera:', err);
@@ -1403,7 +1441,7 @@ export default function EditLoadModal({
     }
   };
 
-  // Attach stream to video element when webcam modal opens
+  
   useEffect(() => {
     if (showWebcamModal && webcamStream && videoRef.current) {
       videoRef.current.srcObject = webcamStream;
@@ -1753,13 +1791,13 @@ export default function EditLoadModal({
               tabIndex={0}
               className="w-full max-w-[500px] h-[400px] flex flex-col items-center justify-center border rounded bg-gray-100 overflow-y-auto relative cursor-pointer touch-pan-y"
               onClick={(e) => {
-                // Only open image source modal if the scroll container is not being scrolled
+                
                 if (!e.currentTarget.classList.contains('scrolling')) {
                   openImageSourceModal(1);
                 }
               }}
               onTouchStart={() => {
-                // Add a small delay to prevent immediate click when scrolling
+               
                 const container = document.querySelector('[onclick*="openImageSourceModal(1)"]');
                 container?.classList.add('scrolling');
                 setTimeout(() => container?.classList.remove('scrolling'), 200);
@@ -1806,7 +1844,7 @@ export default function EditLoadModal({
                       await handleUpload(1, file);
                     } catch (err) {
                       console.error('Conversion error:', err);
-                      // fallback to original
+                     
                       if (e.target.files && e.target.files[0]) await handleUpload(1, e.target.files[0]);
                     }
                   }
