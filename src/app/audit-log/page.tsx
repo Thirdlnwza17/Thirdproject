@@ -11,7 +11,6 @@ interface UserData {
 
 interface ChangeItem {
   action: string;
-  // Add other properties if they exist in your change items
 }
 
 interface ChangeDetail {
@@ -107,7 +106,6 @@ export default function AuditLogPage() {
   const [users, setUsers] = useState<Record<string, { fullName: string, role: string }>>({});
   const [loading, setLoading] = useState(true);
 
-  // Bubble animation effect
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -115,14 +113,12 @@ export default function AuditLogPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
     resizeCanvas();
 
-    // Create bubbles
     const createBubbles = () => {
       const bubbles: Bubble[] = [];
       const bubbleCount = Math.floor((window.innerWidth * window.innerHeight) / 40000);
@@ -141,7 +137,6 @@ export default function AuditLogPage() {
       return bubbles;
     };
 
-    // Draw a bubble
     const drawBubble = (bubble: Bubble) => {
       if (!ctx) return;
       
@@ -150,8 +145,7 @@ export default function AuditLogPage() {
       ctx.fillStyle = `rgba(200, 230, 255, ${bubble.alpha})`;
       ctx.fill();
       
-      // Add highlight
-      ctx.beginPath();
+        ctx.beginPath();
       ctx.arc(
         bubble.x - bubble.radius * 0.3,
         bubble.y - bubble.radius * 0.3,
@@ -163,18 +157,15 @@ export default function AuditLogPage() {
       ctx.fill();
     };
 
-    // Update bubble positions
     const updateBubbles = () => {
       const bubbles = bubblesRef.current;
       
       for (let i = 0; i < bubbles.length; i++) {
         const bubble = bubbles[i];
         
-        // Move bubble
         bubble.x += bubble.dx;
         bubble.y += bubble.dy;
         
-        // Bounce off edges
         if (bubble.x - bubble.radius < 0 || bubble.x + bubble.radius > canvas.width) {
           bubble.dx = -bubble.dx;
         }
@@ -182,7 +173,6 @@ export default function AuditLogPage() {
           bubble.dy = -bubble.dy;
         }
         
-        // Check collision with other bubbles
         for (let j = i + 1; j < bubbles.length; j++) {
           const otherBubble = bubbles[j];
           const dx = bubble.x - otherBubble.x;
@@ -190,24 +180,20 @@ export default function AuditLogPage() {
           const distance = Math.sqrt(dx * dx + dy * dy);
           
           if (distance < bubble.radius + otherBubble.radius) {
-            // Simple elastic collision
             const angle = Math.atan2(dy, dx);
             const sin = Math.sin(angle);
             const cos = Math.cos(angle);
             
-            // Rotate velocities
             const vx1 = bubble.dx * cos + bubble.dy * sin;
             const vy1 = bubble.dy * cos - bubble.dx * sin;
             const vx2 = otherBubble.dx * cos + otherBubble.dy * sin;
             const vy2 = otherBubble.dy * cos - otherBubble.dx * sin;
             
-            // Swap velocities
             bubble.dx = vx2 * cos - vy1 * sin;
             bubble.dy = vy1 * cos + vx2 * sin;
             otherBubble.dx = vx1 * cos - vy2 * sin;
             otherBubble.dy = vy2 * cos + vx1 * sin;
             
-            // Move bubbles apart to prevent sticking
             const overlap = bubble.radius + otherBubble.radius - distance;
             const moveX = (overlap / 2) * Math.cos(angle);
             const moveY = (overlap / 2) * Math.sin(angle);
@@ -221,36 +207,28 @@ export default function AuditLogPage() {
       }
     };
 
-    // Animation loop
     const animate = () => {
       if (!ctx) return;
       
-      // Clear with slight fade for trail effect
       ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Update and draw bubbles
       updateBubbles();
       bubblesRef.current.forEach(bubble => drawBubble(bubble));
       
-      // Continue animation
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    // Handle window resize
     const handleResize = () => {
       resizeCanvas();
       bubblesRef.current = createBubbles();
     };
 
-    // Initialize
     bubblesRef.current = createBubbles();
     animate();
     
-    // Add event listeners
     window.addEventListener('resize', handleResize);
     
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       if (animationRef.current) {
@@ -268,7 +246,6 @@ export default function AuditLogPage() {
     role: string;
   }
 
-  // Load users data
   useEffect(() => {
     const loadUsers = async () => {
       try {
@@ -276,7 +253,6 @@ export default function AuditLogPage() {
         const usersData: Record<string, UserData> = {};
         usersSnapshot.forEach((doc: DocumentData) => {
           const userData = doc.data();
-          // Always store both email and fullName
           usersData[doc.id] = {
             fullName: userData.fullName || userData.displayName || userData.email?.split('@')[0] || 'Unknown User',
             email: userData.email,
@@ -296,7 +272,6 @@ export default function AuditLogPage() {
     loadUsers();
   }, []);
 
-  // Load initial logs
   useEffect(() => {
     const loadLogs = async () => {
       try {
@@ -312,7 +287,6 @@ export default function AuditLogPage() {
 
     loadLogs();
 
-    // Subscribe to real-time updates
     const unsubscribe = subscribeToAuditLogs((newLogs) => {
       setLogs(newLogs);
     });
@@ -320,9 +294,7 @@ export default function AuditLogPage() {
     return () => unsubscribe();
   }, []);
 
-  // Filter logs based on selected filter and search term
   const filteredLogs = logs.map(log => {
-    // First try to find user by ID, then by email
     const userById = users[log.userId];
     const userByEmail = log.userEmail ? users[log.userEmail] : null;
     const user = userById || userByEmail || { 
@@ -351,7 +323,6 @@ export default function AuditLogPage() {
     return matchesFilter && matchesSearch;
   });
 
-  // Pagination
   const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
   const paginatedLogs = filteredLogs.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -363,12 +334,10 @@ export default function AuditLogPage() {
     window.scrollTo(0, 0);
   };
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [filter, searchTerm]);
 
-  // Format action text
   const getActionText = (log: AuditLogEntry) => {
     switch (log.action) {
       case 'CREATE':
@@ -388,7 +357,6 @@ export default function AuditLogPage() {
     }
   };
 
-  // Format entity type
   const getEntityType = (type: string) => {
     switch (type) {
       case 'sterilizer_loads':
@@ -402,9 +370,7 @@ export default function AuditLogPage() {
     }
   };
 
-  // Map field names to Thai labels
   const fieldLabels: Record<string, string> = {
-    // General fields
     program: 'โปรแกรมการนึ่งฆ่าเชื้อ',
     sterilizer_number: 'หมายเลขเครื่องนึ่ง',
     cycle_number: 'รอบที่',
@@ -432,7 +398,6 @@ export default function AuditLogPage() {
     d20: 'D20',
   };
 
-  // Format values for display
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) return 'ไม่ระบุ';
     if (value === '') return 'ว่าง';
@@ -441,19 +406,15 @@ export default function AuditLogPage() {
     return String(value);
   };
 
-  // Format details message
   const getDetailsMessage = (log: AuditLogEntry) => {
-    // For login/logout actions
     if (log.action === 'LOGIN') return 'เข้าสู่ระบบ';
     if (log.action === 'LOGOUT') return 'ออกจากระบบ';
 
-    // For status changes
     if (log.action === 'STATUS_CHANGE' && log.details.field) {
       const field = fieldLabels[log.details.field] || log.details.field;
       return `เปลี่ยน${field} จาก "${formatValue(log.details.oldValue)}" เป็น "${formatValue(log.details.newValue)}"`;
     }
     
-    // For updates with changed fields
     if (log.action === 'UPDATE' && log.details.changed_fields) {
       const changes = log.details.changed_fields as string[];
       const changesObj = log.details.changes as AuditLogChanges | undefined;
@@ -461,7 +422,6 @@ export default function AuditLogPage() {
       let sterilizerInfo = '';
       let dateInfo = '';
 
-      // First pass: collect sterilizer and date info if they were changed
       if (changes.includes('sterilizer') && changesObj?.sterilizer) {
         const sterilizerChange = changesObj.sterilizer;
         sterilizerInfo = `เครื่องนึ่งหมายเลข ${sterilizerChange.oldValue || 'ไม่ระบุ'} เป็น ${sterilizerChange.newValue || 'ไม่ระบุ'}`;
@@ -473,11 +433,9 @@ export default function AuditLogPage() {
           const formatDateValue = (value: unknown): string => {
             if (!value) return 'ไม่ระบุ';
             try {
-              // Handle Firestore Timestamp objects
               if (typeof value === 'object' && value !== null && 'toDate' in value) {
                 return format((value as { toDate: () => Date }).toDate(), 'yyyy/MM/dd', { locale: th });
               }
-              // Handle string or number timestamps
               return format(new Date(String(value)), 'yyyy/MM/dd', { locale: th });
             } catch (e) {
               return 'ไม่ระบุ';
@@ -490,7 +448,6 @@ export default function AuditLogPage() {
         }
       }
 
-      // Add sterilizer and date info if they exist
       if (sterilizerInfo || dateInfo) {
         const infoParts = [];
         if (sterilizerInfo) infoParts.push(sterilizerInfo);
@@ -498,16 +455,13 @@ export default function AuditLogPage() {
         changeMessages.push(`รายการ${infoParts.length > 0 ? ' ' + infoParts.join(', ') : ''}`);
       }
 
-      // Process other changes
       changes.forEach(field => {
-        // Skip already processed fields
         if (field === 'sterilizer' || field === 'date') return;
         
         const fieldLabel = fieldLabels[field as keyof typeof fieldLabels] || field;
         const changes = (log.details.changes as Record<string, unknown>)?.[field] as ChangeDetail | undefined;
         
         if (changes) {
-          // Special handling for image changes
           if (field === 'image_url_1' || field === 'image_url_2') {
             const imageName = field === 'image_url_1' ? 'Sterile Slip' : 'Attest';
             if (changes.newValue === '') {
@@ -519,7 +473,6 @@ export default function AuditLogPage() {
             }
             return; // Skip further processing for image fields
           }
-          // Special handling for test results (mechanical, chemical, bio_test)
           else if (['mechanical', 'chemical_external', 'chemical_internal', 'bio_test'].includes(field)) {
             const oldVal = formatValue(changes.oldValue);
             const newVal = formatValue(changes.newValue);
@@ -527,9 +480,7 @@ export default function AuditLogPage() {
               changeMessages.push(`เปลี่ยน${fieldLabel} จาก "${oldVal}" เป็น "${newVal}"`);
             }
           }
-          // For other fields
           else if (changes.oldValue !== undefined && changes.newValue !== undefined) {
-            // Only show if there's an actual change
             if (JSON.stringify(changes.oldValue) !== JSON.stringify(changes.newValue)) {
               changeMessages.push(`เปลี่ยน${fieldLabel} จาก "${formatValue(changes.oldValue)}" เป็น "${formatValue(changes.newValue)}"`);
             }
@@ -537,7 +488,6 @@ export default function AuditLogPage() {
         }
       });
 
-      // Handle items array changes
       const itemsChange = (log.details.changes as AuditLogChanges)?.items;
       if (itemsChange?._changes) {
         const changes = itemsChange._changes;
@@ -558,9 +508,7 @@ export default function AuditLogPage() {
       return changeMessages.length > 0 ? changeMessages.join(', ') : 'อัปเดตรายการ';
     }
     
-    // For deletes
     if (log.action === 'DELETE') {
-      // Check if we have additional details in the log
       if (log.details) {
         const details = [];
         if (log.details.sterilizer) {
@@ -571,7 +519,6 @@ export default function AuditLogPage() {
             let dateValue: Date | null = null;
             const dateInput = log.details.date;
             
-            // Type guard for Firestore Timestamp
             const isFirestoreTimestamp = (obj: unknown): obj is { seconds: number; nanoseconds: number } => {
               return obj !== null && 
                      typeof obj === 'object' && 
@@ -581,7 +528,6 @@ export default function AuditLogPage() {
                      typeof (obj as { nanoseconds: unknown }).nanoseconds === 'number';
             };
 
-            // Type guard for object with toDate method
             const hasToDateMethod = (obj: unknown): obj is { toDate: () => Date } => {
               return obj !== null && 
                      typeof obj === 'object' && 
@@ -589,7 +535,6 @@ export default function AuditLogPage() {
                      typeof (obj as { toDate: unknown }).toDate === 'function';
             };
 
-            // Handle different date input types
             if (dateInput instanceof Date) {
               dateValue = dateInput;
             } else if (typeof dateInput === 'string' || typeof dateInput === 'number') {
@@ -597,7 +542,6 @@ export default function AuditLogPage() {
             } else if (hasToDateMethod(dateInput)) {
               dateValue = dateInput.toDate();
             } else if (isFirestoreTimestamp(dateInput)) {
-              // Handle Firestore timestamp
               dateValue = new Date(dateInput.seconds * 1000 + dateInput.nanoseconds / 1000000);
             }
             
@@ -614,12 +558,10 @@ export default function AuditLogPage() {
       return 'ลบรายการ';
     }
     
-    // For creates
     if (log.action === 'CREATE') {
       return 'สร้างรายการใหม่';
     }
     
-    // Fallback to message if available
     return log.details.message || 'ไม่มีรายละเอียดเพิ่มเติม';
   };
 
@@ -747,7 +689,7 @@ export default function AuditLogPage() {
             </table>
           </div>
 
-          {/* Pagination */}
+          
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-gray-200 sm:px-6">
               <div className="flex-1 flex justify-between sm:hidden">
@@ -790,7 +732,6 @@ export default function AuditLogPage() {
                     </button>
                     
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      // Show first 2 pages, current page, and last 2 pages
                       let pageNum;
                       if (totalPages <= 5) {
                         pageNum = i + 1;

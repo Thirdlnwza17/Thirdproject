@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Get API key from environment variables
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || 
                       process.env.NEXT_PUBLIC_CLAUDE_API_KEY || 
                       'your-claude-api-key-here';
@@ -27,7 +26,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Claude OCR API call
     const response = await fetch(CLAUDE_API_URL, {
       method: 'POST',
       headers: {
@@ -76,7 +74,6 @@ export async function POST(request: NextRequest) {
     const extractedText = data.content[0].text;
     console.log('OCR completed successfully');
 
-    // Return the extracted text
     return NextResponse.json({ text: extractedText }, { headers });
   } catch (error) {
     console.error('OCR API Error:', error);

@@ -7,6 +7,119 @@ import { collection, getDocs, getFirestore, doc, getDoc } from 'firebase/firesto
 import { initializeApp } from 'firebase/app';
 import { logAuditAction } from '@/dbService';
 
+// Function to detect dominant colors in an image
+const getImageColors = (imageUrl: string): Promise<string[]> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve([]);
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+      
+      // Sample points from the image
+      const samplePoints = [
+        [0.2, 0.2], [0.5, 0.2], [0.8, 0.2],
+        [0.2, 0.5], [0.5, 0.5], [0.8, 0.5],
+        [0.2, 0.8], [0.5, 0.8], [0.8, 0.8]
+      ];
+      
+      const colors = samplePoints.map(([x, y]) => {
+        const pixelX = Math.floor(x * img.width);
+        const pixelY = Math.floor(y * img.height);
+        const pixel = ctx.getImageData(pixelX, pixelY, 1, 1).data;
+        return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+      });
+      
+      resolve(colors);
+    };
+    img.onerror = () => resolve([]);
+    img.src = imageUrl;
+  });
+};
+
+// Function to check if color is in green/yellow range
+const isGreenOrYellow = (r: number, g: number, b: number): boolean => {
+  const [h, s, l] = rgbToHsl(r, g, b);
+  // Green: 60-180 degrees, Yellow: 45-75 degrees
+  return ((h >= 60 && h <= 180) || (h >= 45 && h <= 75)) && s > 0.3 && l > 0.2;
+};
+
+// Function to check if color is in orange/brown range
+const isOrangeBrown = (r: number, g: number, b: number): boolean => {
+  // Convert RGB to HSL for better color range detection
+  const [h, s, l] = rgbToHsl(r, g, b);
+  // Orange: 15-45 degrees, Brown: 20-40 degrees with lower lightness
+  return (h >= 15 && h <= 45 && s > 0.2 && l > 0.2 && l < 0.7);
+};
+
+// Function to check if color is in dark blue/black/gray range
+const isDarkBlueBlackGray = (r: number, g: number, b: number): boolean => {
+  // Dark colors with low lightness
+  const [h, s, l] = rgbToHsl(r, g, b);
+  return (l < 0.4 || (h >= 200 && h <= 260 && s > 0.3 && l < 0.5));
+};
+
+// Function to check if color is in dark brown/pattern range
+const isDarkBrownPattern = (r: number, g: number, b: number): boolean => {
+  const [h, s, l] = rgbToHsl(r, g, b);
+  // Dark brown: 20-40 degrees with low lightness
+  return (h >= 20 && h <= 40 && l < 0.4 && s > 0.3);
+};
+
+// Helper function to convert RGB to HSL
+const rgbToHsl = (r: number, g: number, b: number): [number, number, number] => {
+  r /= 255, g /= 255, b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s, l = (max + min) / 2;
+
+  if (max === min) {
+    h = s = 0; // achromatic
+  } else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+
+  return [h * 360, s, l];
+};
+
+// Function to check image colors and return test results
+const checkImageColors = async (imageUrl: string) => {
+  const colors = await getImageColors(imageUrl);
+  
+  let hasOrangeBrown = false;
+  let hasDarkBlueBlackGray = false;
+  let hasDarkBrownPattern = false;
+  let hasGreenOrYellow = false;
+  for (const color of colors) {
+    const [r, g, b] = color.match(/\d+/g)?.map(Number) || [0, 0, 0];
+    
+    if (isGreenOrYellow(r, g, b)) {
+      hasGreenOrYellow = true;
+      // If we find green/yellow, no need to check other colors
+      break;
+    }
+    
+    if (isOrangeBrown(r, g, b)) hasOrangeBrown = true;
+    if (isDarkBlueBlackGray(r, g, b)) hasDarkBlueBlackGray = true;
+    if (isDarkBrownPattern(r, g, b)) hasDarkBrownPattern = true;
+    
+    // If we've found all colors we're looking for, no need to continue
+    if (hasOrangeBrown && hasDarkBlueBlackGray && hasDarkBrownPattern) break;
+  }
+  return { hasOrangeBrown, hasDarkBlueBlackGray, hasDarkBrownPattern, hasGreenOrYellow };
+};
+
 // Initialize Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyC7jADGWqwgFSMvJGWoDEwPA-GOHlCE22w",
@@ -476,10 +589,11 @@ export default function EditLoadModal({
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target?.result as string;
-      // เช็คซ้ำกับทุก card
-      const isDuplicate = allLoads.some(load =>
-        load.image_url_1 === base64 || load.image_url_2 === base64
-      );
+      // เช็คซ้ำกับทุก card ยกเว้นข้อมูลปัจจุบัน
+      const isDuplicate = allLoads
+        .filter(load => load.id !== editForm.id) // ไม่ตรวจสอบกับข้อมูลปัจจุบัน
+        .some(load => load.image_url_1 === base64 || load.image_url_2 === base64);
+      
       if (isDuplicate) {
         // Start loading before showing alert
         startOcrProgress();
@@ -530,6 +644,50 @@ export default function EditLoadModal({
             return;
           }
           if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
+          
+          // ตรวจสอบสีของรูปภาพ
+          const colorResults = await checkImageColors(base64);
+          
+          // ตั้งค่าผลการทดสอบตามสีที่ตรวจพบ
+          const testResultsUpdate: any = {
+            mechanical: 'ผ่าน'
+          };
+          
+          // ตรวจสอบสีเขียวหรือเหลืองก่อน (ถ้าเจอให้ติ๊กไม่ผ่านทั้งคู่)
+          if (colorResults.hasGreenOrYellow) {
+            testResultsUpdate.chemical_external = 'ไม่ผ่าน';
+            testResultsUpdate.chemical_internal = 'ไม่ผ่าน';
+          } else {
+            // ถ้าไม่เจอสีเขียวหรือเหลือง ตรวจสอบสีอื่นๆ ตามปกติ
+            testResultsUpdate.chemical_external = colorResults.hasOrangeBrown ? 'ผ่าน' : (editForm.chemical_external || 'ไม่ผ่าน');
+            testResultsUpdate.chemical_internal = (colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) 
+              ? 'ผ่าน' 
+              : (editForm.chemical_internal || 'ไม่ผ่าน');
+          }
+          
+          // แจ้งเตือนผลการตรวจสอบสี
+          const colorAlerts = [];
+          if (colorResults.hasGreenOrYellow) {
+            colorAlerts.push('ตรวจพบสีเขียว/เหลือง: ตั้งค่าผลเทปเคมีภายนอกและภายในเป็น "ไม่ผ่าน"');
+          } else {
+            if (colorResults.hasOrangeBrown) {
+              colorAlerts.push('ตรวจพบสีส้ม/น้ำตาล: ตั้งค่าผลเทปเคมีภายนอกเป็น "ผ่าน"');
+            }
+            if (colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) {
+              colorAlerts.push('ตรวจพบสีน้ำเงิน/ดำ/เทา/น้ำตาลเข้ม: ตั้งค่าผลเทปเคมีภายในเป็น "ผ่าน"');
+            }
+          }
+          
+          if (colorAlerts.length > 0) {
+            Swal.fire({
+              title: 'ตรวจพบการเปลี่ยนแปลงสี',
+              html: colorAlerts.join('<br>'),
+              icon: 'info',
+              timer: 4000,
+              showConfirmButton: false
+            });
+          }
+          
           // ถ้าเป็นรูปที่ 1 (sterile slip) ให้ทำ OCR เพื่อหาและตั้งค่าวันที่
           try {
             // ใช้ข้อความ OCR ที่ได้จาก API โดยตรง
@@ -568,11 +726,7 @@ export default function EditLoadModal({
             }
             
             // Auto-check test results when a sterile slip image is uploaded
-            const testResultsUpdate = {
-              mechanical: 'ผ่าน',
-              chemical_external: 'ผ่าน',
-              chemical_internal: 'ผ่าน'
-            };
+            // ใช้ค่าจากการตรวจสอบสีที่ได้ทำไปแล้ว
             
             setEditForm((prev: any) => ({
               ...prev,
@@ -724,8 +878,7 @@ export default function EditLoadModal({
           // อัปเดตผล BI
           const alertMessages = [];
           
-          // ตั้งค่าผลตรวจสอบ BI
-          updates.bi = biResult;
+        
           updates.bio_test = biResult; // Auto-set the bio_test field based on OCR result
           
           // เพิ่มข้อความแจ้งเตือนผลการตรวจสอบ

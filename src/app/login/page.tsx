@@ -25,7 +25,7 @@ interface Bubble {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
@@ -204,15 +204,19 @@ export default function LoginPage() {
     loadUsers();
   }, []);
 
-  // Update selected user when email changes
+  // Update selected user when employeeId changes
   useEffect(() => {
-    if (email && users.length > 0) {
-      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (employeeId && users.length > 0) {
+      // Find user by matching the part before @ in their email with the entered employeeId
+      const user = users.find(u => {
+        const emailLocal = u.email.split('@')[0].toLowerCase();
+        return emailLocal === employeeId.toLowerCase();
+      });
       setSelectedUser(user || null);
     } else {
       setSelectedUser(null);
     }
-  }, [email, users]);
+  }, [employeeId, users]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,19 +224,30 @@ export default function LoginPage() {
     setSuccess("");
     
     if (!selectedUser) {
-      setError("ไม่พบผู้ใช้ที่ตรงกับอีเมลนี้");
+      setError("ไม่พบผู้ใช้");
+      return;
+    }
+    
+    // Check if user has a role assigned
+    if (!selectedUser.role) {
+      setError("ไม่พบบทบาทผู้ใช้ กรุณาติดต่อผู้ดูแลระบบ");
       return;
     }
     
     setLoading(true);
     try {
-      const { role, user } = await loginUser(email, password, selectedUser);
+      // Use the full email for login
+      const { role, user } = await loginUser(selectedUser.email, password, selectedUser);
       
       setSuccess("เข้าสู่ระบบสำเร็จ!");
+      
       if (role === "admin") {
         router.replace("/dashboard");
-      } else {
+      } else if (role === "operator") {
         router.replace("/history");
+      } else {
+        setError("บทบาทผู้ใช้ไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ");
+        setLoading(false);
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -294,18 +309,18 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent text-center mb-2">
           เข้าสู่ระบบ
         </h1>
-        <p className="text-gray-500 text-center mb-8">กรุณากรอกชื่อ-นามสกุล อีเมล และรหัสผ่านของคุณ</p>
+        <p className="text-gray-500 text-center mb-8">กรุณากรอกชื่อ-นามสกุล รหัสพนักงาน ของคุณ</p>
         
         <form className="w-full space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-5">
           <div className="space-y-1">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">อีเมล</label>
+            <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700">รหัสพนักงาน</label>
             <input
-              id="email"
-              type="email"
-              placeholder="กรุณากรอกอีเมล"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              id="employeeId"
+              type="text"
+              placeholder="กรุณากรอกรหัสพนักงาน"
+              value={employeeId}
+              onChange={e => setEmployeeId(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-base text-gray-800 placeholder-gray-400 transition-all duration-200"
               required
             />

@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import Image from 'next/image';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
-import { logAuditAction } from "@/dbService";
+import { logAuditAction, getUserRole } from "@/dbService";
 import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import Link from "next/link";
 import Swal from 'sweetalert2';
 
 import SterilizerLoadsCardView from './SterilizerLoadsCardView';
-import OcrModal from './OcrModal';
 import ImageModal from './ImageModal';
 import HistoryFormModal from './HistoryFormModal';
 import EditLoadModal from './EditLoadModal';
@@ -54,9 +53,9 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full px-4 py-2 font-semibold shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md"
+        className="flex items-center gap-3 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-full px-4 py-1.5 font-medium shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md"
       >
-        <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-purple-300">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden border-2 border-purple-300">
           <Image 
             src="/Instigator.jpg" 
             alt="User" 
@@ -65,7 +64,14 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
             className="w-full h-full object-cover"
           />
         </div>
-        <span className="truncate max-w-[120px]">{user?.displayName || user?.email?.split('@')[0]}</span>
+        <div className="flex flex-col items-start min-w-0">
+          <span className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] md:max-w-[200px] lg:max-w-[260px] xl:max-w-[340px] 2xl:max-w-[440px] text-sm font-medium">
+            {user?.displayName || user?.email?.split('@')[0]}
+          </span>
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            Role: {role === 'admin' ? 'Admin' : 'Operator'}
+          </span>
+        </div>
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
           fill="none"
@@ -80,7 +86,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
       {isOpen && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50">
           <div className="px-4 py-2 border-b border-gray-200">
-            <p className="text-sm font-medium text-gray-900 truncate">{user?.displayName || user?.email}</p>
+            <p className="text-sm font-medium text-gray-900 whitespace-normal break-words">{user?.displayName || user?.email}</p>
             <p className="text-xs text-gray-500">Role: {role === 'admin' ? 'Admin' : 'Operator'}</p>
           </div>
           {role === 'admin' && (
@@ -384,15 +390,19 @@ export default function HistoryPage() {
       if (!firebaseUser) {
         router.replace("/login");
       } else {
-        // ดึง role จาก Firestore
-        const db = getFirestore();
-        const userRef = doc(db, "users", firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        const userRole = userSnap.exists() && userSnap.data().role ? userSnap.data().role : "operator";
-        setRole(userRole);
-        // Redirect operator to /history if not already there
-        if (userRole !== "admin" && router && typeof window !== 'undefined' && window.location.pathname !== "/history") {
-          router.replace("/history");
+        try {
+          // Get user role using email
+          console.log('Getting role for user:', firebaseUser.email);
+          const userRole = await getUserRole(firebaseUser.email || firebaseUser.uid);
+          console.log('User role in history page:', userRole);
+          setRole(userRole);
+          
+          // Admin can stay on history page if they navigate here intentionally
+          console.log('User role set to:', userRole);
+        } catch (error) {
+          console.error('Error getting user role:', error);
+          // Default to operator role on error
+          setRole('operator');
         }
       }
     });
@@ -1022,6 +1032,9 @@ export default function HistoryPage() {
             user={user} 
             clearAllFiltersTrigger={clearAllFiltersTrigger}
             onDateRangeChange={handleDateRangeChange}
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
+            role={role}
           />
           
           {edit && (
@@ -1063,16 +1076,7 @@ export default function HistoryPage() {
           successMsg={successMsg}
           user={user}
         />
-        <OcrModal
-          show={showOcrModal}
-          onClose={handleCloseOcrModal}
-          previewImage={previewImage}
-          ocrText={ocrText}
-          ocrLoading={ocrLoading}
-          saveLoading={saveLoading}
-          saveSuccess={saveSuccess}
-          handleSaveOcrEntry={handleSaveOcrEntry}
-        />
+
         <DuplicateModal
           show={showDuplicateModal}
           onClose={() => setShowDuplicateModal(false)}
@@ -1099,7 +1103,7 @@ export default function HistoryPage() {
         />
       </div>
       <div className="mt-8 text-black text-center text-sm">
-        &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use | Thirdlnwza
+        &copy; {new Date().getFullYear()} Sterilizer Data System | For Ram Hospital | Chitiwat Turmcher
       </div>
     </div>
   );

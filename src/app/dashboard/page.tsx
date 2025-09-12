@@ -64,9 +64,9 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full px-4 py-2 font-semibold shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0"
+        className="flex items-center gap-3 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full px-4 py-1.5 font-medium shadow transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md active:translate-y-0"
       >
-        <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-blue-300">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden border-2 border-blue-300">
           <Image 
             src="/Instigator.jpg" 
             alt="User" 
@@ -75,7 +75,14 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
             className="w-full h-full object-cover"
           />
         </div>
-        <span className="truncate max-w-[120px]">{user?.displayName || user?.email?.split('@')[0]}</span>
+        <div className="flex flex-col items-start min-w-0">
+          <span className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] md:max-w-[200px] lg:max-w-[260px] xl:max-w-[340px] 2xl:max-w-[440px] text-sm font-medium">
+            {user?.displayName || user?.email?.split('@')[0]}
+          </span>
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            Role: {role === 'admin' ? 'Admin' : 'Operator'}
+          </span>
+        </div>
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
           fill="none"
@@ -90,7 +97,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
       {isOpen && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50">
           <div className="px-4 py-2 border-b border-gray-200">
-            <p className="text-sm font-medium text-gray-900 truncate">{user?.displayName || user?.email}</p>
+            <p className="text-sm font-medium text-gray-900 whitespace-normal break-words">{user?.displayName || user?.email}</p>
             <p className="text-xs text-gray-500">Role: {role === 'admin' ? 'Admin' : 'Operator'}</p>
           </div>
           {role === 'admin' && (
@@ -264,9 +271,24 @@ export default function DashboardPage() {
       if (!firebaseUser) {
         setTimeout(() => router.replace("/login"), 100);
       } else {
-        // Get user role using dbService
-        const userRole = await getUserRole(firebaseUser.uid);
-        setRole(userRole);
+        try {
+          // Get user role using email
+          console.log('Getting role for user:', firebaseUser.email);
+          const userRole = await getUserRole(firebaseUser.email || firebaseUser.uid);
+          console.log('User role:', userRole);
+          setRole(userRole);
+          
+          // If user is not admin, redirect to history
+          if (userRole !== 'admin') {
+            console.log('Non-admin user, redirecting to /history');
+            router.replace('/history');
+          }
+        } catch (error) {
+          console.error('Error getting user role:', error);
+          // Default to operator role on error
+          setRole('operator');
+          router.replace('/history');
+        }
       }
     });
     
@@ -724,7 +746,7 @@ export default function DashboardPage() {
                   
       </div>
       <div className="mt-8 text-black text-center text-sm">
-        &copy; {new Date().getFullYear()} Sterilizer Data System | For Hospital Use | Thirdlnwza
+        &copy; {new Date().getFullYear()} Sterilizer Data System | For Ram Hospital | Chitiwat Turmcher
       </div>
     </div>
   );

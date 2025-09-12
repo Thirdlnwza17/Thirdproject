@@ -1,6 +1,3 @@
- // Utility to parse duration input (e.g., '2 ชม.', '8-12 hr', '90', '1:15', etc.)
-// Returns minutes as number or range string (e.g., '120', '480-720')
-
 export function parseDurationToMinutes(input: string): string {
   if (!input) return '';
   let str = input.trim().toLowerCase();

@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 
 export interface FormData {
@@ -20,8 +20,7 @@ export interface FormData {
   chemical_internal?: string;
   bio_test?: string;
   
-  // Staff and other info
-  sterile_staff?: string;
+   sterile_staff?: string;
   result_reader?: string;
   
   // Items array
@@ -56,6 +55,7 @@ export default function HistoryFormModal({
   successMsg, 
   user 
 }: FormModalProps) {
+  const [rowCount, setRowCount] = useState(15);
   // ฟังก์ชันคำนวณสถานะ
   const calculateStatus = (formData: FormData): string => {
     // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
@@ -192,8 +192,14 @@ export default function HistoryFormModal({
   }, [form.program, setForm]);
   
   if (!show) return null;
-  // ก่อน return ให้แน่ใจว่า form.items เป็น array 15 ช่องเสมอ
-  const items = Array.from({ length: 15 }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
+  
+  // Initialize items with dynamic length based on rowCount
+  const items = Array.from({ length: rowCount }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
+  
+  // Function to add a new row
+  const addNewRow = () => {
+    setRowCount(prevCount => prevCount + 1);
+  };
   return (
     <div 
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -208,7 +214,7 @@ export default function HistoryFormModal({
           onClick={onClose}
           aria-label="ปิด"
         >
-          ×
+          ×  
         </button>
         <h2 className="text-2xl font-bold mb-4 text-blue-900 text-center text-black">LOAD IN DATA - บันทึกรอบการทำงาน</h2>
         <form className="flex flex-col gap-4 text-black" onSubmit={handleSubmit}>
@@ -303,6 +309,13 @@ export default function HistoryFormModal({
                   ))}
                 </tbody>
               </table>
+              <button 
+                type="button" 
+                onClick={addNewRow}
+                className="mt-2 bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded text-sm"
+              >
+                + เพิ่มแถว
+              </button>
             </div>
           </div>
           <div className="flex gap-2 mt-4 justify-center">

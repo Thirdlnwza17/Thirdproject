@@ -76,6 +76,9 @@ interface SterilizerLoadsCardViewProps {
   user: any;
   clearAllFiltersTrigger?: number;
   onDateRangeChange?: (range: { startDate: string; endDate: string }) => void;
+  startDate: string;
+  endDate: string;
+  role?: string;
 }
 
 // Helper to ensure ISO date strings (YYYY-MM-DD)
@@ -84,12 +87,15 @@ const ensureIso = (v: string) => v ? v.slice(0,10) : '';
 export default function SterilizerLoadsCardView({ 
   user, 
   clearAllFiltersTrigger,
-  onDateRangeChange
+  onDateRangeChange,
+  startDate,
+  endDate,
+  role = 'operator' // Default to operator if not provided
 }: SterilizerLoadsCardViewProps) {
   // Date range state
   const [dateRange, setDateRange] = useState({
-    startDate: '',
-    endDate: ''
+    startDate: startDate,
+    endDate: endDate
   });
   
   // Handle date range change from the Vercel date picker
@@ -133,7 +139,6 @@ export default function SterilizerLoadsCardView({
   const [selectedLoad, setSelectedLoad] = useState<any>(null);
   const [loads, setLoads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const role = user?.role || 'user';
   const [filter, setFilter] = useState('All');
   const [autoclaveSub, setAutoclaveSub] = useState('All');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -288,11 +293,22 @@ export default function SterilizerLoadsCardView({
   };
 
   // Filter and sort loads
-  const filteredLoads = [...loads].sort(sortLoads).filter(load => {
-    // Date range filter
-    if (dateRange?.startDate || dateRange?.endDate) {
-      const loadDate = load.date || load.test_date;
-      if (!loadDate) return false;
+  const filteredLoads = [...loads]
+    .sort(sortLoads)
+    .filter(load => {
+      // Filter by operator role
+      if (role !== 'admin' && user?.displayName) {
+        const operatorMatch = load.operator === user.displayName || 
+                            load.attendant === user.displayName ||
+                            load.sterile_staff === user.displayName ||
+                            load.result_reader === user.displayName;
+        if (!operatorMatch) return false;
+      }
+      
+      // Date range filter
+      if (dateRange?.startDate || dateRange?.endDate) {
+        const loadDate = load.date || load.test_date;
+        if (!loadDate) return false;
       
       const entryDate = new Date(loadDate);
       entryDate.setHours(0, 0, 0, 0);

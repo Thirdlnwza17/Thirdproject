@@ -1,5 +1,5 @@
 // dbService.ts
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc, limit, where } from 'firebase/firestore';
 import { signInWithEmailAndPassword, updateProfile, User as FirebaseUser, onAuthStateChanged as firebaseAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
@@ -240,11 +240,35 @@ export async function addOcrEntry(data: SterilizerEntry) {
   return await addDoc(collection(db, "sterilizer_ocr_entries"), data);
 }
 
-// Get user role by UID
-export async function getUserRole(uid: string): Promise<string> {
-  const userRef = doc(db, "users", uid);
-  const userSnap = await getDoc(userRef);
-  return userSnap.exists() && userSnap.data().role ? userSnap.data().role : "operator";
+// Get user role by UID or email
+export async function getUserRole(identifier: string): Promise<string> {
+  try {
+    // First try to find by email
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", identifier));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const userData = querySnapshot.docs[0].data();
+      if (userData.role) {
+        return userData.role;
+      }
+    }
+    
+    // If not found by email, try by UID
+    const userRef = doc(db, "users", identifier);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists() && userSnap.data().role) {
+      return userSnap.data().role;
+    }
+    
+    console.warn('No role found for user:', identifier);
+    return "operator";
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return "operator";
+  }
 }
 
 // ฟังก์ชันคำนวณสถานะ
@@ -326,7 +350,7 @@ export async function fetchAllUsers(): Promise<UserData[]> {
       id: doc.id,
       email: doc.data().email,
       fullName: doc.data().fullName || doc.data().displayName || 'No Name',
-      role: doc.data().role || 'operator'
+      role: doc.data().role || ''
     }));
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -336,9 +360,18 @@ export async function fetchAllUsers(): Promise<UserData[]> {
 
 export async function loginUser(email: string, password: string, selectedUserData: UserData) {
   try {
+    console.log('Login attempt with:', { 
+      email, 
+      selectedUserRole: selectedUserData.role,
+      selectedUserData 
+    });
+    
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    const role = selectedUserData.role || 'operator';
+    // Get the role from selectedUserData without any fallback
+    const role = selectedUserData.role;
+    
+    console.log('User authenticated, role:', role);
     
     // Update user's last login time
     await updateProfile(user, {
