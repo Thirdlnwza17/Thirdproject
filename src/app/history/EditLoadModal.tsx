@@ -1366,79 +1366,41 @@ export default function EditLoadModal({
   const switchCamera = async () => {
     if (!videoRef.current) return;
     
+    // Stop any existing tracks
     if (webcamStream) {
       webcamStream.getTracks().forEach(track => track.stop());
     }
     
     try {
-     
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
       setFacingMode(newFacingMode);
       
-      // Get supported constraints first
-      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
-      
-      // Enhanced video constraints for better focus and quality
+      // Base constraints
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: newFacingMode,
-          // Request HD resolution if available
           width: { ideal: 1920, min: 1280 },
           height: { ideal: 1080, min: 720 },
-          // Ensure good frame rate
-          frameRate: { ideal: 30, min: 24 },
+          frameRate: { ideal: 30, min: 24 }
         },
         audio: false
       };
-      
-      // Add focus mode if supported
-      if ('focusMode' in supportedConstraints) {
-        (constraints.video as any).focusMode = 'continuous';
-      }
       
       // For iOS devices, use specific settings
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIOS) {
         (constraints.video as any).facingMode = { exact: newFacingMode };
-        // iOS specific optimizations
         (constraints.video as any).deviceId = undefined; // Let the system choose the best camera
       }
       
+      // Get the new stream with basic constraints
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Apply additional focus settings after stream is active
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack && 'applyConstraints' in videoTrack) {
-        try {
-          // Some browsers support focusDistance for manual focus control
-          if ('focusDistance' in supportedConstraints) {
-            await videoTrack.applyConstraints({
-              advanced: [{ focusDistance: 0 }] as any
-            });
-          }
-        } catch (err) {
-          console.warn('Could not apply focus constraints:', err);
-        }
-      }
+      // Apply all camera settings using our centralized function
+      await applyCameraSettings(stream);
       
+      // Update the stream in state
       setWebcamStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        
-        // Add a small delay and then trigger focus
-        setTimeout(async () => {
-          if (videoTrack && 'applyConstraints' in videoTrack) {
-            try {
-              // Try to set focus to infinity for better focus
-              await videoTrack.applyConstraints({
-                advanced: [{ focusDistance: 0 }] as any
-              });
-            } catch (err) {
-              console.warn('Could not adjust focus:', err);
-            }
-          }
-        }, 1000);
-      }
     } catch (err) {
       console.error('Error switching camera:', err);
       alert('ไม่สามารถสลับกล้องได้ กรุณาตรวจสอบการอนุญาตการใช้งานกล้อง');
@@ -1446,13 +1408,69 @@ export default function EditLoadModal({
   };
 
   
-  useEffect(() => {
-    if (showWebcamModal && webcamStream && videoRef.current) {
-      videoRef.current.srcObject = webcamStream;
-      videoRef.current.muted = true; // allow autoplay
-      const p = videoRef.current.play();
-      if (p && p.catch) p.catch(() => {/* ignore play errors */});
+  const applyCameraSettings = async (stream: MediaStream | null) => {
+    if (!stream || !videoRef.current) return;
+    
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack) return;
+      
+      // Apply initial constraints
+      const constraints: MediaTrackConstraints = {
+        width: { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
+        frameRate: { ideal: 30, min: 24 },
+      };
+      
+      // Add focus settings if supported
+      const supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
+      if ('focusMode' in supportedConstraints) {
+        (constraints as any).focusMode = 'continuous';
+      }
+      
+      // Apply constraints
+      await videoTrack.applyConstraints(constraints);
+      
+      // For iOS devices, apply additional settings
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS && 'applyConstraints' in videoTrack) {
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }] as any
+          });
+        } catch (err) {
+          console.warn('Could not apply advanced constraints:', err);
+        }
+      }
+      
+      // Set video source and play
+      videoRef.current.srcObject = stream;
+      videoRef.current.muted = true;
+      await videoRef.current.play().catch(console.warn);
+      
+      // Try to adjust focus after a short delay
+      setTimeout(async () => {
+        try {
+          if ('applyConstraints' in videoTrack) {
+            await videoTrack.applyConstraints({
+              advanced: [{ focusDistance: 0 }] as any
+            });
+          }
+        } catch (err) {
+          console.warn('Could not adjust focus:', err);
+        }
+      }, 1000);
+      
+    } catch (err) {
+      console.error('Error applying camera settings:', err);
     }
+  };
+
+  useEffect(() => {
+    if (showWebcamModal && webcamStream) {
+      applyCameraSettings(webcamStream);
+    }
+    
     return () => {
       // don't stop stream here; closeWebcamModal handles it
     };
