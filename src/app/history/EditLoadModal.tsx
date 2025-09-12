@@ -1198,7 +1198,30 @@ export default function EditLoadModal({
   // Open the picker modal for the selected image slot (choose camera or gallery)
   const openImageSourceModal = (idx: 1 | 2) => {
     setCurrentImageIdx(idx);
-    setShowPickerModal(true);
+    
+    // On iOS, directly open the camera
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (isIOS) {
+      // On iOS, we'll use the native camera via file input with capture attribute
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // Use back camera by default
+      
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          handleUpload(idx, file);
+        }
+      };
+      
+      input.click();
+    } else {
+      // On other devices, show the picker modal
+      setShowPickerModal(true);
+    }
   };
 
   // Convert non-jpeg/png image files (e.g., HEIC) to JPEG using canvas
@@ -1280,63 +1303,56 @@ export default function EditLoadModal({
   // Removed ImageSourceModal and CameraModal components - using native capture via file input
 
   // Modal that appears when user clicks an image area, to choose camera or gallery
-  const ImagePickerModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-80">
-        <h3 className="text-lg font-bold mb-4">แนบรูป</h3>
-        <div className="flex flex-col space-y-3">
-          <button
-            onClick={async () => {
-              // If desktop and webcam available, open webcam modal; else use native capture input
-              const ua = navigator.userAgent || '';
-              const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
-              const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-              setShowPickerModal(false);
-              if (!isMobile && hasGetUserMedia) {
-                // open webcam modal
-                try {
-                  const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: facingMode },
-                    audio: false 
-                  });
-                  setWebcamStream(stream);
-                  // show modal first, video element will be attached in useEffect
-                  setShowWebcamModal(true);
-                } catch (err) {
-                  // fallback to native input if webcam not allowed
-                  if (currentImageIdx === 1) slipInputRef.current?.click();
-                  else if (currentImageIdx === 2) attestInputRef.current?.click();
-                }
-              } else {
-                if (currentImageIdx === 1) slipInputRef.current?.click();
-                else if (currentImageIdx === 2) attestInputRef.current?.click();
-              }
-            }}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            ถ่ายรูป
-          </button>
-          <button
-            onClick={() => {
-              // trigger gallery input for current index
-              if (currentImageIdx === 1) slipGalleryRef.current?.click();
-              else if (currentImageIdx === 2) attestGalleryRef.current?.click();
-              setShowPickerModal(false);
-            }}
-            className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
-          >
-            แนบรูปจากแกลเลอรี่
-          </button>
-          <button
-            onClick={() => setShowPickerModal(false)}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            ยกเลิก
-          </button>
+  const ImagePickerModal = () => {
+    const handleTakePhoto = () => {
+      setShowPickerModal(false);
+      const input = currentImageIdx === 1 ? slipInputRef.current : attestInputRef.current;
+      if (input) {
+        // On iOS, this will open the native camera app
+        input.click();
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50">
+        <div className="bg-white rounded-t-3xl w-full max-w-md mx-auto p-6 pt-4">
+          <div className="flex justify-center mb-4">
+            <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+          </div>
+          
+          <div className="space-y-3">
+            <button
+              onClick={handleTakePhoto}
+              className="flex items-center justify-center gap-3 w-full py-4 text-blue-500 text-lg font-medium"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              ถ่ายรูป
+            </button>
+            <button
+              onClick={() => {
+                // trigger gallery input for current index
+                if (currentImageIdx === 1) slipGalleryRef.current?.click();
+                else if (currentImageIdx === 2) attestGalleryRef.current?.click();
+                setShowPickerModal(false);
+              }}
+              className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+            >
+              แนบรูปจากแกลเลอรี่
+            </button>
+            <button
+              onClick={() => setShowPickerModal(false)}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            >
+              ยกเลิก
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Capture image from webcam video, convert to JPEG file and run OCR
   const captureFromWebcam = async () => {
@@ -1798,27 +1814,21 @@ export default function EditLoadModal({
                 accept="image/*"
                 capture="environment"
                 ref={slipInputRef}
-                onChange={async (e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    try {
-                      const original = e.target.files[0];
-                      const file = await convertImageFileToJpeg(original);
-                      await handleUpload(1, file);
-                    } catch (err) {
-                      console.error('Conversion error:', err);
-                      // fallback to original
-                      if (e.target.files && e.target.files[0]) await handleUpload(1, e.target.files[0]);
-                    }
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handleUpload(1, e.target.files[0]);
                   }
+                  // Reset the input to allow selecting the same file again
+                  e.target.value = '';
                 }}
-                style={{ position: 'absolute', left: '-9999px' }}
               />
               <input
                 type="file"
                 accept="image/png, image/jpeg"
                 ref={slipGalleryRef}
                 onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
+                  if (e.target.files?.[0]) {
                     handleUpload(1, e.target.files[0]);
                   }
                 }}
