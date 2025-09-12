@@ -1195,10 +1195,14 @@ export default function EditLoadModal({
     setShowPickerModal(true);
   };
 
-  // Convert non-jpeg/png image files (e.g., HEIC) to JPEG using canvas
-  const convertImageFileToJpeg = async (file: File, maxWidth = 2000): Promise<File> => {
+  // Enhanced image processing function with better quality and format handling
+  const convertImageFileToJpeg = async (file: File, maxWidth = 1920): Promise<File> => {
     if (!file) throw new Error('No file');
-    if (file.type === 'image/jpeg' || file.type === 'image/png') return file;
+    
+    // Return as is if already in a good format and size
+    if (file.type === 'image/jpeg' && file.size < 2 * 1024 * 1024) {
+      return file;
+    }
 
     // Load image
     const url = URL.createObjectURL(file);
@@ -1911,19 +1915,28 @@ export default function EditLoadModal({
                 accept="image/*"
                 capture="environment"
                 ref={attestInputRef}
+                style={{ position: 'absolute', left: '-9999px' }}
+                onClick={(e) => {
+                  // Reset value to allow selecting the same file again
+                  const target = e.target as HTMLInputElement;
+                  target.value = '';
+                }}
                 onChange={async (e) => {
                   if (e.target.files && e.target.files[0]) {
                     try {
                       const original = e.target.files[0];
-                      const file = await convertImageFileToJpeg(original);
-                      await handleUpload(2, file);
+                      // Process the image with enhanced quality settings
+                      const processedFile = await convertImageFileToJpeg(original, 1920);
+                      await handleUpload(2, processedFile);
                     } catch (err) {
-                      console.error('Conversion error:', err);
-                      if (e.target.files && e.target.files[0]) await handleUpload(2, e.target.files[0]);
+                      console.error('Error processing image:', err);
+                      // Fallback to original file if processing fails
+                      if (e.target.files && e.target.files[0]) {
+                        await handleUpload(2, e.target.files[0]);
+                      }
                     }
                   }
                 }}
-                style={{ position: 'absolute', left: '-9999px' }}
               />
               <input
                 type="file"
