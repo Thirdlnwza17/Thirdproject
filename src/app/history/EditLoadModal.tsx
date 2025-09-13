@@ -1,10 +1,15 @@
 'use client';
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
 import { User } from 'firebase/auth';
-import { collection, getDocs, getFirestore, doc, getDoc } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
+import { debounce } from 'lodash';
+
+interface Item {
+  id: string;
+  name: string;
+}
+import { collection, getDocs, doc, getDoc } from '@/dbService';
 import { logAuditAction } from '@/dbService';
 
 // Function to detect dominant colors in an image
@@ -125,19 +130,8 @@ const checkImageColors = async (imageUrl: string) => {
   return { hasOrangeBrown, hasDarkBlueBlackGray, hasDarkBrownPattern, hasGreenOrYellow };
 };
 
-// Initialize Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyC7jADGWqwgFSMvJGWoDEwPA-GOHlCE22w",
-  authDomain: "sterilie-23a8a.firebaseapp.com",
-  projectId: "sterilie-23a8a",
-  storageBucket: "sterilie-23a8a.firebasestorage.app",
-  messagingSenderId: "544281812264",
-  appId: "1:544281812264:web:9179294cca6908f8d5441d",
-  measurementId: "G-5QD8XV01XR"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Import db from firebaseConfig
+import { db } from '../../firebaseConfig';
 
 // ImageSourceType removed - native file inputs and webcam modal are used instead
 
@@ -181,6 +175,13 @@ export default function EditLoadModal({
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  
+  // State for item search functionality
+  const [searchResults, setSearchResults] = useState<Record<number, Item[]>>({});
+  const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
+  const [isSearching, setIsSearching] = useState<Record<number, boolean>>({});
+  
   // OCR loading / progress
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -197,6 +198,72 @@ export default function EditLoadModal({
         return Math.round(next);
       });
     }, 500) as unknown as number;
+  };
+
+  // Debounced search function
+  const searchItems = useCallback(debounce(async (term: string, rowIndex: number) => {
+    if (!term || term.length < 5) {
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+      setIsSearching(prev => ({ ...prev, [rowIndex]: false }));
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/logs?action=search-items&q=${encodeURIComponent(term)}`);
+      const data = await response.json();
+      setSearchResults(prev => ({ ...prev, [rowIndex]: data.items || [] }));
+    } catch (error) {
+      console.error('Error searching items:', error);
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    } finally {
+      setIsSearching(prev => ({ ...prev, [rowIndex]: false }));
+    }
+  }, 300), []);
+  
+  // Handle item name change with search
+  const handleItemNameChange = (e: React.ChangeEvent<HTMLInputElement>, rowIndex: number) => {
+    if (!editForm) return;
+    
+    const { value } = e.target;
+    const newItems = [...(editForm.items || [])];
+    newItems[rowIndex] = { ...newItems[rowIndex], name: value };
+    setEditForm({ ...editForm, items: newItems });
+    
+    // Update search term and trigger search only if 5+ characters
+    setSearchTerm(prev => ({ ...prev, [rowIndex]: value }));
+    if (value.length >= 5) {
+      setIsSearching(prev => ({ ...prev, [rowIndex]: true }));
+      searchItems(value, rowIndex);
+    } else {
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    }
+  };
+  
+  // Handle item selection from search results
+  const handleSelectItem = (item: Item, rowIndex: number) => {
+    if (!editForm) return;
+    
+    const newItems = [...(editForm.items || [])];
+    newItems[rowIndex] = { 
+      ...newItems[rowIndex], 
+      name: item.name,
+      itemId: item.id
+    };
+    setEditForm({ ...editForm, items: newItems });
+    setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    setSearchTerm(prev => ({ ...prev, [rowIndex]: '' }));
+    
+    // Focus on quantity field after selection
+    const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
+    qtyInput?.focus();
+  };
+  
+  // Handle input focus to show recent searches or clear results
+  const handleInputFocus = (rowIndex: number) => {
+    const currentTerm = searchTerm[rowIndex] || '';
+    if (currentTerm.length >= 5) {
+      searchItems(currentTerm, rowIndex);
+    }
   };
 
   const stopOcrProgress = (final = true) => {
@@ -655,33 +722,38 @@ export default function EditLoadModal({
           
           // ตั้งค่าผลการทดสอบตามสีที่ตรวจพบ
           const testResultsUpdate: any = {
-            mechanical: 'ผ่าน'
+            mechanical: 'ผ่าน'  // ตั้งค่าเป็น 'ผ่าน' เสมอ
           };
           
-          // ตรวจสอบสีเขียวหรือเหลืองก่อน (ถ้าเจอให้ติ๊กไม่ผ่านทั้งคู่)
-          if (colorResults.hasGreenOrYellow) {
+          // ไม่ต้องตรวจสอบข้อความแสดงความผิดพลาดของกลไกจาก OCR อีกต่อไป
+          // เนื่องจากต้องการให้ผ่านเสมอ
+          
+          // ตรวจสอบสีที่แสดงว่าผ่าน (สีส้ม/น้ำตาล/น้ำเงิน/ดำ/เทา/น้ำตาลเข้ม)
+          const hasPassingColors = colorResults.hasOrangeBrown || 
+                                 colorResults.hasDarkBlueBlackGray || 
+                                 colorResults.hasDarkBrownPattern;
+          
+          // ถ้าพบสีที่แสดงว่าผ่าน ให้ติ๊กผ่านทั้งคู่
+          if (hasPassingColors) {
+            testResultsUpdate.chemical_external = 'ผ่าน';
+            testResultsUpdate.chemical_internal = 'ผ่าน';
+          } 
+          // ถ้าไม่เจอสีอะไรเลย ไม่ต้องตั้งค่าอะไร (ไม่ต้องติ๊กผ่านหรือไม่ผ่าน)
+          // ถ้าเจอสีเขียว/เหลือง ให้ติ๊กไม่ผ่านทั้งคู่
+          else if (colorResults.hasGreenOrYellow) {
             testResultsUpdate.chemical_external = 'ไม่ผ่าน';
             testResultsUpdate.chemical_internal = 'ไม่ผ่าน';
-          } else {
-            // ถ้าไม่เจอสีเขียวหรือเหลือง ตรวจสอบสีอื่นๆ ตามปกติ
-            testResultsUpdate.chemical_external = colorResults.hasOrangeBrown ? 'ผ่าน' : (editForm.chemical_external || 'ไม่ผ่าน');
-            testResultsUpdate.chemical_internal = (colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) 
-              ? 'ผ่าน' 
-              : (editForm.chemical_internal || 'ไม่ผ่าน');
           }
           
-          // แจ้งเตือนผลการตรวจสอบสี
+          // แจ้งเตือนผลการตรวจสอบสี (เฉพาะที่เจอ)
           const colorAlerts = [];
           if (colorResults.hasGreenOrYellow) {
             colorAlerts.push('ตรวจพบสีเขียว/เหลือง: ตั้งค่าผลเทปเคมีภายนอกและภายในเป็น "ไม่ผ่าน"');
-          } else {
-            if (colorResults.hasOrangeBrown) {
-              colorAlerts.push('ตรวจพบสีส้ม/น้ำตาล: ตั้งค่าผลเทปเคมีภายนอกเป็น "ผ่าน"');
-            }
-            if (colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) {
-              colorAlerts.push('ตรวจพบสีน้ำเงิน/ดำ/เทา/น้ำตาลเข้ม: ตั้งค่าผลเทปเคมีภายในเป็น "ผ่าน"');
-            }
+          } else if (colorResults.hasOrangeBrown || colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) {
+            // ถ้าพบสีที่แสดงว่าผ่าน (ส้ม/น้ำตาล/น้ำเงิน/ดำ/เทา/น้ำตาลเข้ม)
+            colorAlerts.push('ตรวจพบสีที่แสดงว่าผ่าน: ตั้งค่าผลเทปเคมีภายนอกและภายในเป็น "ผ่าน"');
           }
+          // ไม่ต้องแจ้งเตือนถ้าไม่พบสีใดๆ
           
           if (colorAlerts.length > 0) {
             Swal.fire({
@@ -723,7 +795,7 @@ export default function EditLoadModal({
             }
             
             if (totalDuration) {
-              // แปลงรูปแบบเวลาเป็นนาที
+              // แปลงรูปแบบเวลาเป็นนาที:วินาที
               const minutes = parseDurationToMinutes(totalDuration);
               
               // เก็บค่าเป็นนาทีสำหรับทุกโปรแกรม รวมถึง EO
@@ -760,22 +832,27 @@ export default function EditLoadModal({
               }
             }
             
-            // แจ้งเตือนการติ๊กผ่านผลการทดสอบอัตโนมัติ
-            messageParts.push('<div class="mt-2"><b>ตั้งค่าผลการทดสอบเป็น "ผ่าน" ให้แล้วสำหรับ:</b>');
-            messageParts.push('- การทดสอบกลไก (Mechanical)');
-            messageParts.push('- เทปเคมีภายนอก (Chemical External)');
-            messageParts.push('- เทปเคมีภายใน (Chemical Internal)</div>');
+            // แจ้งเตือนเมื่อพบข้อมูล
+            let alertMessage = `ตั้งค่าวันที่จาก OCR: ${messageParts.join(', ')}`;
             
-            // แสดงการแจ้งเตือนข้อความเดียวที่รวมทุกข้อมูล
-            if (messageParts.length > 0) {
-              Swal.fire({
-                title: 'พบข้อมูลในสลิป',
-                html: messageParts.join('<br>'),
-                icon: 'success',
-                timer: 4000,  // เพิ่มเวลาแสดงข้อความเป็น 4 วินาที
-                showConfirmButton: false
-              });
+            // เพิ่มข้อความผล BI ถ้ามี
+            if (testResultsUpdate.mechanical) {
+              alertMessage += `\nตรวจพบผลตรวจสอบกลไก: ${testResultsUpdate.mechanical}`;
             }
+            if (testResultsUpdate.chemical_external) {
+              alertMessage += `\nตรวจพบผลตรวจสอบเทปเคมีภายนอก: ${testResultsUpdate.chemical_external}`;
+            }
+            if (testResultsUpdate.chemical_internal) {
+              alertMessage += `\nตรวจพบผลตรวจสอบเทปเคมีภายใน: ${testResultsUpdate.chemical_internal}`;
+            }
+            
+            Swal.fire({
+              title: 'พบข้อมูลในสลิป',
+              text: alertMessage,
+              icon: 'success',
+              timer: 4000,
+              showConfirmButton: false
+            });
           } catch (error) {
             console.error('Error processing OCR:', error);
             Swal.fire({
@@ -1076,7 +1153,6 @@ export default function EditLoadModal({
       }
 
       // ดึงข้อมูลเดิมก่อนอัปเดต
-      const db = getFirestore();
       const docRef = doc(db, 'sterilizer_loads', formData.id);
       const docSnap = await getDoc(docRef);
       const beforeData = docSnap.exists() ? docSnap.data() : {};
@@ -1494,7 +1570,7 @@ export default function EditLoadModal({
             <div className="flex justify-between w-full px-4">
               <button 
                 onClick={closeWebcamModal} 
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
               >
                 ยกเลิก
               </button>
@@ -1726,19 +1802,55 @@ export default function EditLoadModal({
                     <tr key={i} className="text-black">
                       <td className="border p-1 text-center text-black">{i + 1}</td>
                       <td className="border p-1 text-black">
-                        <input
-                          type="text"
-                          className="w-full border rounded px-1 py-0.5 text-black"
-                          value={item.name}
-                          onChange={e => {
-                            const newItems = [...(editForm.items || [])];
-                            newItems[i] = { ...newItems[i], name: e.target.value };
-                            setEditForm({ ...editForm, items: newItems });
-                          }}
-                        />
+                        <div className="relative">
+                          <input
+                            ref={el => {
+                              if (el) {
+                                inputRefs.current[i] = el;
+                              }
+                            }}
+                            name={`item_name_${i}`}
+                            type="text"
+                            className="w-full border rounded px-1 py-0.5 text-black"
+                            value={item.name}
+                            onChange={(e) => handleItemNameChange(e, i)}
+                            onFocus={() => handleInputFocus(i)}
+                            onKeyDown={e => {
+                              // On Enter or Tab, move to quantity field first
+                              if (e.key === 'Enter' || e.key === 'Tab') {
+                                e.preventDefault();
+                                const currentQuantityInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${i}"]`);
+                                if (currentQuantityInput) {
+                                  currentQuantityInput.focus();
+                                }
+                              }
+                            }}
+                            autoFocus={i === 0 && (editForm.items?.length || 0) === 1}
+                          />
+                          {isSearching[i] && (
+                            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                            </div>
+                          )}
+                          {searchResults[i]?.length > 0 && (
+                            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                              {searchResults[i].map((result: Item, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => handleSelectItem(result, i)}
+                                >
+                                  <div className="font-medium">{result.name}</div>
+                                  <div className="text-xs text-gray-500">ID: {result.id}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="border p-1 text-black">
                         <input
+                          name={`item_qty_${i}`}
                           type="number"
                           min="0"
                           className="w-full border rounded px-1 py-0.5 text-black"
@@ -1748,14 +1860,48 @@ export default function EditLoadModal({
                             newItems[i] = { ...newItems[i], quantity: e.target.value };
                             setEditForm({ ...editForm, items: newItems });
                           }}
+                          onKeyDown={e => {
+                            // On Enter or Tab, move to next row's device name
+                            if (e.key === 'Enter' || e.key === 'Tab') {
+                              e.preventDefault();
+                              const currentItems = editForm.items || [];
+                              
+                              if (i < currentItems.length - 1) {
+                                // Move to next row's device name
+                                const nextInput = inputRefs.current[i + 1];
+                                if (nextInput) {
+                                  nextInput.focus();
+                                }
+                              } else {
+                                // If this is the last row, add a new row
+                                const newItems = [...currentItems, { name: '', quantity: '' }];
+                                setEditForm({ ...editForm, items: newItems });
+                                
+                                // Focus the new input after it's rendered
+                                setTimeout(() => {
+                                  const newInput = inputRefs.current[newItems.length - 1];
+                                  if (newInput) {
+                                    newInput.focus();
+                                  }
+                                }, 0);
+                              }
+                            }
+                          }}
                         />
                       </td>
                       <td className="border p-1 text-center">
-                        <button type="button" className="text-red-500 font-bold px-2" onClick={() => {
-                          const newItems = [...(editForm.items || [])];
-                          newItems.splice(i, 1);
-                          setEditForm({ ...editForm, items: newItems });
-                        }}>ลบ</button>
+                        <button 
+                          type="button" 
+                          className="text-red-500 hover:text-red-700 font-bold px-2" 
+                          onClick={() => {
+                            const newItems = [...(editForm.items || [])];
+                            newItems.splice(i, 1);
+                            setEditForm({ ...editForm, items: newItems });
+                          }}
+                          title="ลบ"
+                        >
+                          🗑️
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1763,9 +1909,21 @@ export default function EditLoadModal({
               </table>
               <button type="button" className="mt-2 px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded" onClick={() => {
                 const newItems = [...(editForm.items || [])];
-                newItems.push({ name: '', quantity: '' });
+                const newItem = { name: '', quantity: '' };
+                newItems.push(newItem);
                 setEditForm({ ...editForm, items: newItems });
-              }}>+ เพิ่มแถว</button>
+                
+                // Focus the new input after it's rendered
+                setTimeout(() => {
+                  const lastIndex = newItems.length - 1;
+                  const input = inputRefs.current[lastIndex];
+                  if (input) {
+                    input.focus();
+                  }
+                }, 0);
+              }}>
+                + เพิ่มแถว
+              </button>
             </div>
             {/* Attest Table & SN/Time */}
             <div className="mt-4">

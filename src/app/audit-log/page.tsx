@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { DocumentData } from 'firebase/firestore';
 
 interface UserData {
   fullName: string;
@@ -38,11 +37,9 @@ interface AuditLogDetails {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getAuditLogs, subscribeToAuditLogs, AuditLogEntry } from '@/dbService';
+import { getAuditLogs, subscribeToAuditLogs, AuditLogEntry, fetchAllUsers } from '@/dbService';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/firebaseConfig';
 
 // Component for collapsible content
 interface CollapsibleContentProps {
@@ -238,20 +235,27 @@ export default function AuditLogPage() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const usersList = await fetchAllUsers();
         const usersData: Record<string, UserData> = {};
-        usersSnapshot.forEach((doc: DocumentData) => {
-          const userData = doc.data();
-          usersData[doc.id] = {
-            fullName: userData.fullName || userData.displayName || userData.email?.split('@')[0] || 'Unknown User',
-            email: userData.email,
-            role: userData.role?.toLowerCase() === 'admin' ? 'admin' : 'operator' // Only 'admin' or 'operator' roles
+        
+        usersList.forEach(user => {
+          const userData = {
+            fullName: user.fullName || user.displayName || user.email?.split('@')[0] || 'Unknown User',
+            email: user.email,
+            role: user.role?.toLowerCase() === 'admin' ? 'admin' : 'operator'
           };
+          
+          // Store user by ID
+          if (user.id) {
+            usersData[user.id] = userData;
+          }
+          
           // Also store user by email for lookup
-          if (userData.email) {
-            usersData[userData.email] = usersData[doc.id];
+          if (user.email) {
+            usersData[user.email] = userData;
           }
         });
+        
         setUsers(usersData);
       } catch (error) {
         console.error('Error loading users:', error);

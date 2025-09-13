@@ -4,9 +4,23 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
-import { auth } from "../../firebaseConfig";
-import { logAuditAction, getUserRole } from "@/dbService";
-import { getFirestore, collection, query, orderBy, onSnapshot, Timestamp, doc, updateDoc, deleteDoc, getDoc, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../../firebaseConfig";
+import { 
+  logAuditAction, 
+  getUserRole, 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  doc, 
+  updateDoc, 
+  deleteDoc, 
+  getDoc, 
+  addDoc, 
+  getDocs, 
+  serverTimestamp,
+  Timestamp
+} from "@/dbService";
 import Link from "next/link";
 import Swal from 'sweetalert2';
 
@@ -406,8 +420,6 @@ export default function HistoryPage() {
         }
       }
     });
-    const db = getFirestore();
-    
     // Subscribe to manual entries
     const q = query(collection(db, "sterilizer_entries"), orderBy("test_date", "desc"));
     const unsubEntries = onSnapshot(q, (snapshot) => {
@@ -454,7 +466,6 @@ export default function HistoryPage() {
         throw new Error("ไม่พบรหัสข้อมูลที่จะแก้ไข");
       }
       
-      const db = getFirestore();
       const docRef = doc(db, "sterilizer_entries", editForm.id);
       
       // ดึงข้อมูลก่อนแก้ไข
@@ -542,7 +553,6 @@ export default function HistoryPage() {
       return;
     }
     try {
-      const db = getFirestore();
       // ดึงข้อมูลก่อนลบ
       const beforeSnap = await getDoc(doc(db, "sterilizer_entries", editForm.id));
       const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
@@ -608,7 +618,6 @@ export default function HistoryPage() {
         throw new Error("ไม่พบรหัสข้อมูล OCR ที่จะแก้ไข");
       }
       
-      const db = getFirestore();
       const docRef = doc(db, "sterilizer_ocr_entries", editOcrForm.id);
       
       // ดึงข้อมูลก่อนแก้ไข
@@ -684,8 +693,6 @@ export default function HistoryPage() {
       return;
     }
     try {
-      const db = getFirestore();
-      
       // ดึงข้อมูลก่อนลบ
       const beforeSnap = await getDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
       const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
@@ -722,7 +729,6 @@ export default function HistoryPage() {
   };
 
   const checkForDuplicates = async (imageUrl: string, extractedText: string) => {
-    const db = getFirestore();
     const q = query(collection(db, "sterilizer_ocr_entries"), orderBy("created_at", "desc"));
     const snapshot = await getDocs(q);
     const existingEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
@@ -765,7 +771,6 @@ export default function HistoryPage() {
     setSaveLoading(true);
     setSaveSuccess("");
     try {
-      const db = getFirestore();
       const checkboxResults = lastOcrApiResult?.checkboxResults;
       
       // ฟังก์ชันคำนวณสถานะ
@@ -848,7 +853,6 @@ export default function HistoryPage() {
       return;
     }
     try {
-      const db = getFirestore();
       const filteredItems = Array.isArray((form as any).items) ? (form as any).items.filter((item: any) => item.name || item.quantity) : [];
       // กรอง device_id ออกจาก form ก่อนบันทึก (เฉพาะถ้ามี)
       const formWithoutDeviceId = { ...form };

@@ -2,8 +2,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 import { saveAs } from 'file-saver';
-import { getFirestore, collection, query, orderBy, onSnapshot, updateDoc, deleteDoc, doc, getDocs, getDoc } from 'firebase/firestore';
-import { logAuditAction } from '@/dbService';
+import { 
+  logAuditAction, 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  Timestamp 
+} from '@/dbService';
+import { db } from '@/firebaseConfig';
 import EditLoadModal from './EditLoadModal';
 import SterilizerLoadsCompactView from './SterilizerLoadsCompactView';
 import { VercelDateRangePicker } from '@/components/VercelDateRangePicker';
@@ -159,23 +171,32 @@ export default function SterilizerLoadsCardView({
   const [selectedStaff, setSelectedStaff] = useState("");
   const [snFilter, setSnFilter] = useState('');
   const [searchText, setSearchText] = useState("");
+  const [equipmentSearchResults, setEquipmentSearchResults] = useState<Array<{id: string, name: string}>>([]);
+  const [showEquipmentResults, setShowEquipmentResults] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [mechanicalFilter, setMechanicalFilter] = useState("");
   const [chemicalExternalFilter, setChemicalExternalFilter] = useState("");
   const [chemicalInternalFilter, setChemicalInternalFilter] = useState("");
   const [bioTestFilter, setBioTestFilter] = useState("");
 
-  // Fetch staff list from Firestore
+  // Fetch staff list using dbService
   useEffect(() => {
     const fetchStaff = async () => {
       try {
-        const db = getFirestore();
         const usersSnapshot = await getDocs(collection(db, 'users'));
-        const users = usersSnapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            fullName: doc.data().fullName || doc.data().email || 'Unknown'
-          }))
-          .filter(user => user.fullName && user.fullName !== 'Unknown');
+        const users: {id: string, fullName: string}[] = [];
+        
+        usersSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          const fullName = data.fullName || data.email || 'Unknown';
+          if (fullName && fullName !== 'Unknown') {
+            users.push({
+              id: doc.id,
+              fullName: fullName
+            });
+          }
+        });
         
         // Remove duplicates and sort alphabetically
         const uniqueUsers = Array.from(new Map(users.map(user => [user.fullName, user])).values())
@@ -192,7 +213,6 @@ export default function SterilizerLoadsCardView({
 
   useEffect(() => {
     setLoading(true);
-    const db = getFirestore();
     const q = query(collection(db, 'sterilizer_loads'), orderBy('created_at', 'desc'));
     // Use a ref to ignore the initial snapshot when deciding if a new document was added
     const initialSnapshot = { current: true } as { current: boolean };
@@ -350,26 +370,49 @@ export default function SterilizerLoadsCardView({
     // Staff filter
     if (!filterByStaff(load)) return false;
 
-    // Search only: operator, items, sterilizer
+    // Search functionality
     if (searchText && searchText.trim()) {
       const lower = searchText.trim().toLowerCase();
-      // Operator fields
-      const operator = (load.operator || '').toLowerCase();
-      const sterileStaff = (load.sterile_staff || '').toLowerCase();
-      const resultReader = (load.result_reader || '').toLowerCase();
-      // Equipment names
-      const items = Array.isArray(load.items)
-        ? load.items.map((item: any) => (typeof item === 'string' ? item : (item.name || ''))).join(' ').toLowerCase()
-        : (typeof load.items === 'string' ? load.items.toLowerCase() : '');
-      // Sterilizer
-      const sterilizer = (load.sterilizer || '').toLowerCase();
-      if (!(
-        operator.includes(lower) ||
-        sterileStaff.includes(lower) ||
-        resultReader.includes(lower) ||
-        items.includes(lower) ||
-        sterilizer.includes(lower)
-      )) return false;
+      
+      // If we have search results, match by equipment ID or name
+      if (equipmentSearchResults.length > 0) {
+        const hasMatchingEquipment = load.items?.some((item: any) => {
+          const itemId = typeof item === 'object' ? item.id : item;
+          const itemName = typeof item === 'object' ? item.name : '';
+          
+          return equipmentSearchResults.some(eq => 
+            eq.id === itemId || 
+            itemName.toLowerCase().includes(eq.name.toLowerCase())
+          );
+        });
+        
+        if (!hasMatchingEquipment) return false;
+      } 
+      // Regular text search if no equipment matches
+      else {
+        // Search in operator fields
+        const operator = (load.operator || '').toLowerCase();
+        const sterileStaff = (load.sterile_staff || '').toLowerCase();
+        const resultReader = (load.result_reader || '').toLowerCase();
+        
+        // Search in equipment names from items array
+        const items = Array.isArray(load.items)
+          ? load.items.map((item: any) => (typeof item === 'string' ? item : (item.name || ''))).join(' ').toLowerCase()
+          : (typeof load.items === 'string' ? load.items.toLowerCase() : '');
+        
+        // Search in sterilizer field (cycle number)
+        const sterilizer = (load.sterilizer || '').toLowerCase();
+        
+        if (!(
+          operator.includes(lower) ||
+          sterileStaff.includes(lower) ||
+          resultReader.includes(lower) ||
+          items.includes(lower) ||
+          sterilizer.includes(lower)
+        )) {
+          return false;
+        }
+      }
     }
 
     return true;
@@ -393,7 +436,6 @@ export default function SterilizerLoadsCardView({
     setEditLoading(true);
     setEditError("");
     try {
-      const db = getFirestore();
       const updateData = {
         ...formData,
         attest_sn: formData.attest_sn || '',
@@ -437,7 +479,6 @@ export default function SterilizerLoadsCardView({
     setDeleteLoading(true);
     setEditError("");
     try {
-      const db = getFirestore();
       const docRef = doc(db, 'sterilizer_loads', id);
       
       // ดึงข้อมูลก่อนลบเพื่อบันทึกลง audit log
@@ -508,7 +549,7 @@ export default function SterilizerLoadsCardView({
       "เจ้าหน้าที่",
       "ผู้อ่านผล"
     ];
-    // Map Firestore fields correctly
+
     const rows = filteredLoads.map(e => [
       (
         e.date &&
@@ -562,13 +603,78 @@ export default function SterilizerLoadsCardView({
       </div>
       {/* Main Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <input
-          className="border rounded px-2 py-1 text-sm text-black bg-white w-48 min-w-[120px] h-[30px]"
-          type="text"
-          placeholder="ค้นหา อุปกรณ์, รอบการฆ่าเชื้อ"
-          value={searchText}
-          onChange={e => { setSearchText(e.target.value); setCurrentPage(1); }}
-        />
+        <div className="relative">
+          <input
+            className="border rounded px-2 py-1 text-sm text-black bg-white w-48 min-w-[120px] h-[30px]"
+            type="text"
+            placeholder="ค้นหา อุปกรณ์, รอบการฆ่าเชื้อ"
+            value={searchText}
+            onChange={async (e) => { 
+              const value = e.target.value;
+              setSearchText(value);
+              setCurrentPage(1);
+              
+              // Clear previous timeout
+              if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+              }
+              
+              // Search equipment if text is 5+ characters
+              if (value.trim().length >= 5) {
+                setIsSearching(true);
+                searchTimeoutRef.current = setTimeout(async () => {
+                  try {
+                    const response = await fetch(`/api/logs?action=search-items&q=${encodeURIComponent(value)}`);
+                    const data = await response.json();
+                    setEquipmentSearchResults(data.items || []);
+                    setShowEquipmentResults(true);
+                  } catch (error) {
+                    console.error('Error searching equipment:', error);
+                    setEquipmentSearchResults([]);
+                  } finally {
+                    setIsSearching(false);
+                  }
+                }, 300);
+              } else {
+                setEquipmentSearchResults([]);
+                setShowEquipmentResults(false);
+              }
+            }}
+            onFocus={() => searchText.trim().length >= 5 && setShowEquipmentResults(true)}
+            onBlur={() => setTimeout(() => setShowEquipmentResults(false), 200)}
+          />
+          {isSearching && (
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+            </div>
+          )}
+          {showEquipmentResults && equipmentSearchResults.length > 0 && (
+            <div className="absolute z-50 mt-1 min-w-[300px] bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden">
+              <div className="bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">
+                เลือกอุปกรณ์
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {equipmentSearchResults.map((item) => (
+                  <div 
+                    key={item.id}
+                    className="px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer flex justify-between items-start"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSearchText(item.name);
+                      setEquipmentSearchResults([item]);
+                      setShowEquipmentResults(false);
+                    }}
+                  >
+                    <span className="break-words flex-1">{item.name}</span>
+                    <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+                      {item.id}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         
         {/* Staff Filter */}
         <div className="flex items-center h-[30px]">

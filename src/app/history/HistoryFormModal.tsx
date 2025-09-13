@@ -1,6 +1,13 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Swal from 'sweetalert2';
+import { debounce } from 'lodash';
+
+export interface Item {
+  id: string;
+  name: string;
+  // Add other item properties as needed
+}
 
 export interface FormData {
   // Basic fields
@@ -24,7 +31,11 @@ export interface FormData {
   result_reader?: string;
   
   // Items array
-  items?: Array<{ name: string; quantity: string | number }>;
+  items?: Array<{ 
+    name: string; 
+    quantity: string | number; 
+    itemId?: string;
+  }>;
   
   // For type compatibility with the rest of the application
   [key: string]: string | boolean | number | undefined | Array<{ name: string; quantity: string | number }>;
@@ -55,7 +66,132 @@ export default function HistoryFormModal({
   successMsg, 
   user 
 }: FormModalProps) {
-  const [rowCount, setRowCount] = useState(15);
+  const [rowCount, setRowCount] = useState(1);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [searchResults, setSearchResults] = useState<Record<number, Item[]>>({});
+  const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
+  const [isSearching, setIsSearching] = useState<Record<number, boolean>>({});
+
+  // Debounced search function
+  const searchItems = useCallback(debounce(async (term: string, rowIndex: number) => {
+    if (!term || term.length < 5) {
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+      setIsSearching(prev => ({ ...prev, [rowIndex]: false }));
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/logs?action=search-items&q=${encodeURIComponent(term)}`);
+      const data = await response.json();
+      setSearchResults(prev => ({ ...prev, [rowIndex]: data.items || [] }));
+    } catch (error) {
+      console.error('Error searching items:', error);
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    } finally {
+      setIsSearching(prev => ({ ...prev, [rowIndex]: false }));
+    }
+  }, 300), []);
+
+  // Handle item name change
+  const handleItemNameChange = (e: React.ChangeEvent<HTMLInputElement>, rowIndex: number) => {
+    const { value } = e.target;
+    const newItems = [...(form.items || [])];
+    newItems[rowIndex] = { ...newItems[rowIndex], name: value };
+    setForm(prev => ({ ...prev, items: newItems }));
+    
+    // Update search term and trigger search only if 5+ characters
+    setSearchTerm(prev => ({ ...prev, [rowIndex]: value }));
+    if (value.length >= 5) {
+      setIsSearching(prev => ({ ...prev, [rowIndex]: true }));
+      searchItems(value, rowIndex);
+    } else {
+      setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    }
+  };
+
+  // Handle item selection from search results
+  const handleSelectItem = (item: Item, rowIndex: number) => {
+    const newItems = [...(form.items || [])];
+    newItems[rowIndex] = { 
+      ...newItems[rowIndex], 
+      name: item.name,
+      itemId: item.id
+    };
+    setForm(prev => ({ ...prev, items: newItems }));
+    setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
+    setSearchTerm(prev => ({ ...prev, [rowIndex]: '' }));
+    
+    // Focus on quantity field after selection
+    const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
+    qtyInput?.focus();
+  };
+
+  // Handle input focus to show recent searches or clear results
+  const handleInputFocus = (rowIndex: number) => {
+    const currentTerm = searchTerm[rowIndex] || '';
+    if (currentTerm.length >= 5) {
+      searchItems(currentTerm, rowIndex);
+    }
+  };
+
+  // Handle quantity change and navigation
+  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>, rowIndex: number) => {
+    const { value } = e.target;
+    const newItems = [...(form.items || [])];
+    newItems[rowIndex] = { ...newItems[rowIndex], quantity: value };
+    setForm(prev => ({ ...prev, items: newItems }));
+  };
+
+  // Handle keyboard navigation and QR code scan (rapid input)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: 'name' | 'quantity') => {
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Determine next field to focus
+      if (field === 'name') {
+        // Focus quantity field in same row
+        const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
+        qtyInput?.focus();
+      } else if (field === 'quantity') {
+        if (rowIndex < rowCount - 1) {
+          // Focus name field in next row
+          const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${rowIndex + 1}"]`);
+          nextNameInput?.focus();
+        } else {
+          // Add new row and focus its name field
+          addRow();
+          // Small timeout to ensure new row is rendered
+          setTimeout(() => {
+            const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${rowIndex + 1}"]`);
+            nextNameInput?.focus();
+          }, 0);
+        }
+      }
+    }
+  };
+
+  // Handle input changes (for QR code scanning)
+  const handleInput = (e: React.FormEvent<HTMLInputElement>, rowIndex: number, field: 'name' | 'quantity') => {
+    const target = e.target as HTMLInputElement;
+    const value = target.value;
+    
+    // Check for QR code input (typically ends with Enter or Tab)
+    if (field === 'name' && (value.includes('\n') || value.includes('\t'))) {
+      e.preventDefault();
+      const cleanValue = value.replace(/[\n\t]/g, '').trim();
+      
+      // Update the input value without the special characters
+      const newItems = [...(form.items || [])];
+      newItems[rowIndex] = { ...newItems[rowIndex], name: cleanValue };
+      setForm(prev => ({ ...prev, items: newItems }));
+      
+      // Move to quantity field
+      const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
+      qtyInput?.focus();
+    }
+  };
+
+
   // ฟังก์ชันคำนวณสถานะ
   const calculateStatus = (formData: FormData): string => {
     // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
@@ -114,6 +250,7 @@ export default function HistoryFormModal({
       console.error('Error submitting form:', error);
     }
   };
+
   // Auto-fill staff and reader from user info whenever the modal is shown
   useEffect(() => {
     if (show && user) {
@@ -190,16 +327,34 @@ export default function HistoryFormModal({
       }));
     }
   }, [form.program, setForm]);
-  
+
+  // Add a new row to the items table
+  const addRow = () => {
+    setRowCount(prev => prev + 1);
+    setForm(prev => ({
+      ...prev,
+      items: [...(prev.items || []), { name: '', quantity: '' }]
+    }));
+  };
+
+  // Remove a row from the items table
+  const removeRow = (index: number) => {
+    if (rowCount <= 1) return; // Don't remove the last row
+    
+    setRowCount(prev => prev - 1);
+    const newItems = [...(form.items || [])];
+    newItems.splice(index, 1);
+    setForm(prev => ({
+      ...prev,
+      items: newItems
+    }));
+  };
+
   if (!show) return null;
   
   // Initialize items with dynamic length based on rowCount
   const items = Array.from({ length: rowCount }, (_, i) => (form.items && form.items[i]) ? form.items[i] : { name: '', quantity: '' });
   
-  // Function to add a new row
-  const addNewRow = () => {
-    setRowCount(prevCount => prevCount + 1);
-  };
   return (
     <div 
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -279,30 +434,59 @@ export default function HistoryFormModal({
                     <tr key={i} className="text-black">
                       <td className="border p-1 text-center text-black">{i + 1}</td>
                       <td className="border p-1 text-black">
-                        <input
-                          name={`item_name_${i}`}
-                          type="text"
-                          className="w-full border rounded px-1 py-0.5 text-black"
-                          value={item.name}
-                          onChange={e => {
-                            const newItems = [...items];
-                            newItems[i] = { ...newItems[i], name: e.target.value };
-                            setForm({ ...form, items: newItems });
-                          }}
-                        />
+                        <div className="position-relative">
+                          <input
+                            type="text"
+                            name={`item_name_${i}`}
+                            className="w-full p-2 border rounded"
+                            value={item.name || ''}
+                            onChange={(e) => handleItemNameChange(e, i)}
+                            onKeyDown={(e) => handleKeyDown(e, i, 'name')}
+                            onInput={(e) => handleInput(e, i, 'name')}
+                            onFocus={() => handleInputFocus(i)}
+placeholder="พิมพ์อย่างน้อย 5 ตัวอักษร"
+                            required
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck="false"
+                          />
+                          {isSearching[i] && (
+                            <div className="position-absolute top-50 end-0 translate-middle-y me-2">
+                              <div className="spinner-border spinner-border-sm text-secondary" role="status">
+                                <span className="visually-hidden">กำลังค้นหา...</span>
+                              </div>
+                            </div>
+                          )}
+                          {searchResults[i]?.length > 0 && (
+                            <div className="position-absolute z-3 w-100 bg-white border rounded mt-1 shadow">
+                              {searchResults[i].map((result) => (
+                                <div 
+                                  key={result.id}
+                                  className="p-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                                  onClick={() => handleSelectItem(result, i)}
+                                >
+                                  <span>{result.name}</span>
+                                  {result.id && (
+                                    <span className="text-xs text-gray-500 ml-2">ID: {result.id}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="border p-1 text-black">
                         <input
                           name={`item_qty_${i}`}
                           type="number"
-                          min="0"
-                          className="w-full border rounded px-1 py-0.5 text-black"
+                          className="border rounded px-2 py-1 w-20"
+                          min="1"
                           value={item.quantity}
-                          onChange={e => {
-                            const newItems = [...items];
-                            newItems[i] = { ...newItems[i], quantity: e.target.value };
-                            setForm({ ...form, items: newItems });
-                          }}
+                          onChange={(e) => handleQuantityChange(e, i)}
+                          onKeyDown={(e) => handleKeyDown(e, i, 'quantity')}
+                          onInput={(e) => handleInput(e, i, 'quantity')}
+                          autoComplete="off"
                         />
                       </td>
                     </tr>
@@ -311,7 +495,7 @@ export default function HistoryFormModal({
               </table>
               <button 
                 type="button" 
-                onClick={addNewRow}
+                onClick={addRow}
                 className="mt-2 bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded text-sm"
               >
                 + เพิ่มแถว

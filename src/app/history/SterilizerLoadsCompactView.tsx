@@ -3,7 +3,7 @@ import React, { useState, useCallback } from 'react';
 import { getStatuses } from './SterilizerLoadsCardView';
 import EditLoadModal from './EditLoadModal';
 import { User } from 'firebase/auth';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from '@/dbService';
 
 // Extend the Firebase User type with our custom properties
 type AppUser = User & {
@@ -80,8 +80,7 @@ export default function SterilizerLoadsCompactView({
             <tr className="bg-gray-100">
               <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-24">วันที่</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-16">รอบที่</th>
-              <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400">รายการอุปกรณ์</th>
-              <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-16">จำนวน</th>
+              <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-1/3">รายการอุปกรณ์</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-24">โปรแกรม</th>
               <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-32">สถานะ</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-20">SN</th>
@@ -121,16 +120,19 @@ export default function SterilizerLoadsCompactView({
                   <td className="py-2 px-3 text-sm text-gray-800 border-r border-gray-300 text-center"> 
                     {load.sterilizer || '-'}
                   </td>
-                  <td className="py-2 px-3 border-r border-gray-300"> 
+                  <td className="py-2 px-3 border-r border-gray-300">
                     <div className="text-xs text-gray-800">
                       {items.length > 0 ? (
                         <div className="space-y-1">
                           {items
                             .slice(0, expandedItems[load.id] ? items.length : 3)
                             .map((item: SterilizerItem, idx: number) => (
-                              <div key={idx} className="flex items-center min-h-[24px]">
-                                <span className="break-words">
-                                  {item.name.length > 40 ? `${item.name.substring(0, 40)}...` : item.name}
+                              <div key={idx} className="flex items-center justify-between min-h-[24px] gap-2 py-0.5">
+                                <span className="whitespace-normal break-words flex-1">
+                                  {item.name}
+                                </span>
+                                <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[11px] min-w-[24px] text-center">
+                                  {item.quantity || 0}
                                 </span>
                               </div>
                             ))}
@@ -151,24 +153,6 @@ export default function SterilizerLoadsCompactView({
                         <span className="text-gray-400">ไม่มีรายการ</span>
                       )}
                     </div>
-                  </td>
-                  <td className="py-2 px-3 border-r border-gray-300"> 
-                    {items.length > 0 ? (
-                      <div className="space-y-1">
-                        {items
-                          .slice(0, expandedItems[load.id] ? items.length : 3)
-                          .map((item: SterilizerItem, idx: number) => (
-                            <div key={idx} className="min-h-[24px] flex items-center justify-center">
-                              <span className="text-[11px]">{item.quantity || 0}</span>
-                            </div>
-                          ))}
-                        {items.length > 3 && (
-                          <div className="h-5" />
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-400 text-[11px]">-</span>
-                    )}
                   </td>
                   <td className="py-2 px-3 text-center text-sm text-gray-800 border-r border-gray-300"> 
                     {load.program || '-'}

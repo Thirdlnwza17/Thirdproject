@@ -1,6 +1,4 @@
-// Analytics service for dashboard program analysis
 
-// กำหนด interface สำหรับผลการตรวจสอบแต่ละตัว (Indicator)
 export interface CheckboxResults {
   chemical_external?: string; // เทปเคมีภายนอก
   chemical_internal?: string; // เทปเคมีภายใน

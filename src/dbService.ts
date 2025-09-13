@@ -1,5 +1,31 @@
+import { 
+  collection, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, 
+  doc, getDocs, getDoc, setDoc, limit as limitFn, where, Timestamp,
+  getFirestore, serverTimestamp, getCountFromServer, startAfter,
+  QueryDocumentSnapshot, QueryConstraint, query as buildQuery
+} from 'firebase/firestore';
 
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, getDoc, getDocs, doc, Timestamp, setDoc, limit, where } from 'firebase/firestore';
+// Re-export Firestore functions and types
+export {
+  Timestamp,
+  collection,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  where,
+  getFirestore,
+  serverTimestamp
+};
+
+// Export query builder functions
+export const query = buildQuery;
+export const limit = limitFn;
 import { signInWithEmailAndPassword, updateProfile, User as FirebaseUser, onAuthStateChanged as firebaseAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
@@ -189,32 +215,184 @@ export async function deleteLog(program: string, id: string, userId: string = ''
 }
 
 
-export async function getAllLogsFromAll() {
+export interface QueryOptions {
+  limit?: number;
+  offset?: number;
+  filters?: Record<string, any>;
+  fields?: string[];
+  orderBy?: { field: string; direction: 'asc' | 'desc' };
+}
+
+// In-memory cache for development (replace with Redis in production)
+const cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCacheKey(collection: string, options: QueryOptions): string {
+  return `${collection}:${JSON.stringify(options)}`;
+}
+
+async function getCachedData(key: string, fetchFn: () => Promise<any>, ttl = DEFAULT_TTL) {
+  const now = Date.now();
+  const cached = cache.get(key);
+  
+  if (cached && (now - cached.timestamp < cached.ttl)) {
+    return cached.data;
+  }
+  
+  const data = await fetchFn();
+  cache.set(key, { data, timestamp: now, ttl });
+  return data;
+}
+
+export async function getAllLogsFromAll(options: QueryOptions = {}) {
+  const {
+    limit = 100,
+    offset = 0,
+    filters = {},
+    fields = [],
+    orderBy: orderByOption = { field: 'created_at', direction: 'desc' }
+  } = options;
+
   const colNames = [...Object.values(COLLECTIONS), 'sterilizer_loads'];
-  const results = await Promise.all(colNames.map(async col => {
-    const q = query(collection(db, col), orderBy('created_at', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data(), _col: col }) as SterilizerEntry);
-  }));
-  return results.flat();
+  
+  const processCollection = async (col: string) => {
+    const cacheKey = getCacheKey(col, options);
+    
+    return getCachedData(cacheKey, async () => {
+      let q = query(collection(db, col));
+      
+      // Apply filters
+      Object.entries(filters).forEach(([field, value]) => {
+        if (value !== undefined) {
+          q = query(q, where(field, '==', value));
+        }
+      });
+      
+      // Apply ordering
+      q = query(q, orderBy(orderByOption.field, orderByOption.direction));
+      
+      // Get total count before pagination
+      const countSnapshot = await getCountFromServer(q);
+      const total = countSnapshot.data().count;
+      
+      // Apply pagination with offset
+      let paginatedQuery = q;
+      const queryConstraints: QueryConstraint[] = [];
+      
+      if (offset > 0) {
+        // For offset pagination, we need to get the documents first
+        const offsetQuery = buildQuery(q, limitFn(offset));
+        const offsetSnapshot = await getDocs(offsetQuery);
+        const lastVisible = offsetSnapshot.docs[offsetSnapshot.docs.length - 1];
+        if (lastVisible) {
+          queryConstraints.push(startAfter(lastVisible));
+        }
+      }
+      
+      // Always apply the limit
+      queryConstraints.push(limitFn(limit));
+      paginatedQuery = buildQuery(q, ...queryConstraints);
+      
+      const snap = await getDocs(paginatedQuery);
+      const items = snap.docs.map(doc => {
+        const data = doc.data();
+        // Apply field projection if specified
+        const projectedData = fields.length > 0 
+          ? Object.fromEntries(
+              Object.entries(data).filter(([key]) => fields.includes(key))
+            )
+          : data;
+          
+        return { 
+          id: doc.id, 
+          ...projectedData,
+          _col: col 
+        } as SterilizerEntry;
+      });
+      
+      return {
+        items,
+        total,
+        hasMore: offset + items.length < total,
+        limit,
+        offset
+      };
+    });
+  };
+  
+  // Process collections in parallel
+  const results = await Promise.all(colNames.map(processCollection));
+  
+  // Combine results
+  return {
+    items: results.flatMap(r => r.items),
+    total: results.reduce((sum, r) => sum + r.total, 0),
+    hasMore: results.some(r => r.hasMore),
+    limit,
+    offset
+  };
+}
+
+// Pre-aggregated data for dashboards
+interface AggregationOptions {
+  groupBy: string;
+  metrics: string[];
+  timeRange?: { start: Date; end: Date };
+}
+
+export async function getAggregatedLogs(options: AggregationOptions) {
+  const { groupBy, metrics, timeRange } = options;
+  const cacheKey = `aggregate:${JSON.stringify(options)}`;
+  
+  return getCachedData(cacheKey, async () => {
+    const colNames = [...Object.values(COLLECTIONS), 'sterilizer_loads'];
+    const results = await Promise.all(colNames.map(async col => {
+      let q = query(collection(db, col));
+      
+      // Apply time range filter if specified
+      if (timeRange) {
+        q = query(q, 
+          where('created_at', '>=', Timestamp.fromDate(timeRange.start)),
+          where('created_at', '<=', Timestamp.fromDate(timeRange.end))
+        );
+      }
+      
+      const snapshot = await getDocs(q);
+      const items = snapshot.docs.map(doc => doc.data());
+      
+      // Simple in-memory aggregation (for large datasets, consider Firestore aggregation queries)
+      const grouped = items.reduce((acc, item) => {
+        const key = item[groupBy];
+        if (!acc[key]) {
+          acc[key] = { _count: 0 };
+          metrics.forEach(metric => {
+            acc[key][`sum_${metric}`] = 0;
+            acc[key][`avg_${metric}`] = 0;
+          });
+        }
+        
+        acc[key]._count++;
+        metrics.forEach(metric => {
+          if (typeof item[metric] === 'number') {
+            acc[key][`sum_${metric}`] += item[metric];
+            acc[key][`avg_${metric}`] = acc[key][`sum_${metric}`] / acc[key]._count;
+          }
+        });
+        
+        return acc;
+      }, {} as Record<string, any>);
+      
+      return { collection: col, data: Object.entries(grouped).map(([key, value]) => ({ [groupBy]: key, ...value })) };
+    }));
+    
+    return results;
+  }, 5 * 60 * 1000); // 5 minute cache for aggregated data
 } 
 
 
 
-// Update manual entry
-export async function updateSterilizerEntry(id: string, data: SterilizerEntry) {
-  return await updateDoc(doc(db, "sterilizer_entries", id), data);
-}
 
-// Delete manual entry
-export async function deleteSterilizerEntry(id: string) {
-  return await deleteDoc(doc(db, "sterilizer_entries", id));
-}
 
-// Add OCR entry
-export async function addOcrEntry(data: SterilizerEntry) {
-  return await addDoc(collection(db, "sterilizer_ocr_entries"), data);
-}
 
 // Get user role by UID or email
 export async function getUserRole(identifier: string): Promise<string> {
