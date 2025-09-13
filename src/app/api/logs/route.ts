@@ -7,7 +7,6 @@ import {
   getLog,
   getAllLogsFromAll,
   getAuditLogs,
-  subscribeToAuditLogs,
   fetchAllUsers,
   getUserRole,
   getCurrentUser,
@@ -15,9 +14,7 @@ import {
   updateOcrEntry,
   deleteOcrEntry,
   signOutUser,
-  type AuditLogEntry,
-  type SterilizerEntry,
-  type QueryOptions
+  type SterilizerEntry
 } from '@/dbService';
 
 // Cache for logs with TTL (5 minutes)
@@ -44,11 +41,12 @@ async function getCachedData<T>(key: string, fetchFn: () => Promise<T>): Promise
 }
 
 // Invalidate relevant caches on write operations
-function invalidateCaches() {
-  cache.clear();
-}
+// This function is currently not used but kept for future use
+// function invalidateCaches() {
+//   cache.clear();
+// }
 
-import { collection, getDocs, query, where, limit as limitQuery, getFirestore } from 'firebase/firestore';
+import { collection, getDocs, query, where, limit as limitQuery } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 
 export async function GET(request: NextRequest) {
@@ -83,13 +81,13 @@ export async function GET(request: NextRequest) {
       // If search term is 5 or more characters, try ID search first
       if (isIdSearch) {
         // First try exact match
-        let q = query(
+        const q = query(
           itemsRef,
           where('id', '==', searchTerm),
           limitQuery(1)
         );
         
-        let snapshot = await getDocs(q);
+        const snapshot = await getDocs(q);
         items = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
