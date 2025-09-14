@@ -1,10 +1,7 @@
 'use client';
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebaseConfig";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
 import Image from "next/image";
 
 interface Bubble {
@@ -174,18 +171,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const db = getFirestore();
-        const userRef = doc(db, "users", firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        const role = userSnap.exists() && userSnap.data().role ? userSnap.data().role : "operator";
-        if (role !== "admin") {
-          router.replace("/history");
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth');
+        const data = await response.json();
+        
+        // If user is logged in but not admin, redirect to history
+        if (data.user && data.user.role !== 'admin') {
+          router.replace('/history');
         }
+        // If there's an error or no user, stay on the current page (login page)
+      } catch (error) {
+        console.error('Auth check error:', error);
+        // Don't redirect if there's an error
       }
-    });
-    return () => unsubscribe();
+    };
+
+    checkAuth();
   }, [router]);
 
   return (

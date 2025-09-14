@@ -1,4 +1,3 @@
-// Dashboard constants for program analytics and UI
 
 export const MAIN_PROGRAMS = [
   { key: "EO", label: "EO" },

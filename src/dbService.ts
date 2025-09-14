@@ -26,7 +26,22 @@ export {
 // Export query builder functions
 export const query = buildQuery;
 export const limit = limitFn;
-import { signInWithEmailAndPassword, updateProfile, User as FirebaseUser, onAuthStateChanged as firebaseAuthStateChanged } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut,
+  createUserWithEmailAndPassword,
+  updateProfile, 
+  User as FirebaseUser, 
+  UserCredential,
+  onAuthStateChanged as firebaseAuthStateChanged,
+  sendPasswordResetEmail,
+  confirmPasswordReset,
+  updateEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  sendEmailVerification
+} from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
 

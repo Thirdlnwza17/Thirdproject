@@ -40,11 +40,6 @@ async function getCachedData<T>(key: string, fetchFn: () => Promise<T>): Promise
   return data;
 }
 
-// Invalidate relevant caches on write operations
-// This function is currently not used but kept for future use
-// function invalidateCaches() {
-//   cache.clear();
-// }
 
 import { collection, getDocs, query, where, limit as limitQuery } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';

@@ -29,6 +29,8 @@ import ImageModal from './ImageModal';
 import HistoryFormModal from './HistoryFormModal';
 import EditLoadModal from './EditLoadModal';
 import DuplicateModal from './DuplicateModal';
+import { FormData } from './HistoryFormModal';
+import BubbleBackground from "@/components/BubbleBackground";
 
 type TestResult = 'ผ่าน' | 'ไม่ผ่าน';
 
@@ -46,12 +48,11 @@ interface DuplicateEntry {
 }
 
 
-// User dropdown component
+
 const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -128,8 +129,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
 };
 
 
-import { FormData } from './HistoryFormModal';
-import BubbleBackground from "@/components/BubbleBackground";
+
 
 // Initialize form with default values that match the FormData type
 const initialForm: FormData = {
@@ -209,8 +209,6 @@ export default function HistoryPage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   // OCR state
-
-  // เพิ่ม state สำหรับเก็บผลลัพธ์ล่าสุดจาก OCR API
   const [lastOcrApiResult, setLastOcrApiResult] = useState<Record<string, unknown> | null>(null);
 
   // Image zoom/pan state for edit modal
@@ -323,73 +321,6 @@ export default function HistoryPage() {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.type === 'application/pdf') {
-      await Swal.fire({
-        title: 'ไม่รองรับไฟล์ PDF',
-        text: 'ระบบไม่รองรับการอัปโหลดไฟล์ PDF กรุณาอัปโหลดไฟล์รูปภาพแทน',
-        icon: 'error',
-        confirmButtonText: 'ตกลง',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
-    } else if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const imageUrl = event.target?.result as string;
-        // OCR ก่อน แล้วตรวจสอบ keyword
-        try {
-          const base64Data = imageUrl.split(',')[1];
-          const response = await fetch('/api/claude-ocr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64Data })
-          });
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `API error: ${response.status}`);
-          }
-          const data = await response.json();
-          let ocrRaw = data.text || '';
-          ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
-          // ตรวจสอบ keyword
-          const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword));
-          if (!isSlip) {
-            await Swal.fire({
-              title: 'รูปภาพไม่ถูกต้อง',
-              text: 'ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง',
-              icon: 'warning',
-              confirmButtonText: 'ตกลง',
-              confirmButtonColor: '#3b82f6',
-            });
-            return;
-          }
-          // ถ้าใช่ slip จริง ค่อยเปิด modal OCR ต่อ
-          setPreviewImage(imageUrl);
-          setShowOcrModal(true);
-          setOcrLoading(false);
-          setOcrText(ocrRaw);
-          setLastOcrApiResult(data);
-        } catch (error) {
-          console.error('OCR Error:', error);
-          setOcrText('เกิดข้อผิดพลาดในการอ่านข้อความจากรูปภาพ');
-          setOcrLoading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } else {
-      await Swal.fire({
-        title: 'รูปแบบไฟล์ไม่รองรับ',
-        text: 'ระบบรองรับเฉพาะไฟล์รูปภาพเท่านั้น',
-        icon: 'error',
-        confirmButtonText: 'ตกลง',
-        confirmButtonColor: '#3b82f6',
-      });
-    }
-  };
-
   const handleCloseOcrModal = () => {
     setShowOcrModal(false);
     setPreviewImage(null);
@@ -405,45 +336,23 @@ export default function HistoryPage() {
         router.replace("/login");
       } else {
         try {
-          // Get user role using email
+         
           console.log('Getting role for user:', firebaseUser.email);
           const userRole = await getUserRole(firebaseUser.email || firebaseUser.uid);
           console.log('User role in history page:', userRole);
           setRole(userRole);
           
-          // Admin can stay on history page if they navigate here intentionally
+         
           console.log('User role set to:', userRole);
         } catch (error) {
           console.error('Error getting user role:', error);
-          // Default to operator role on error
+      
           setRole('operator');
         }
       }
     });
-    // Subscribe to manual entries
-    const q = query(collection(db, "sterilizer_entries"), orderBy("test_date", "desc"));
-    const unsubEntries = onSnapshot(q, (snapshot) => {
-      setEntries(snapshot.docs.map(doc => {
-  const data = doc.data() as Partial<SterilizerEntry>;
-  return {
-    id: doc.id,
-    test_date: data.test_date || '',
-    serial_number: data.serial_number || '',
-    program: data.program || '',
-    items: data.items || '',
-    chemical_result: data.chemical_result || '',
-    biological_result: data.biological_result || '',
-    sterilization_time: data.sterilization_time || '',
-    temperature: data.temperature || '',
-    operator: data.operator || '',
-    ...data
-  };
-}));
-    });
-    
-    return () => {
+      return () => {
       unsubscribe();
-      unsubEntries();
     };
   }, [router]);
 
@@ -461,141 +370,12 @@ export default function HistoryPage() {
     e.preventDefault();
     setEditLoading(true);
     setEditError("");
-    try {
-      if (!editForm.id) {
-        throw new Error("ไม่พบรหัสข้อมูลที่จะแก้ไข");
-      }
-      
-      const docRef = doc(db, "sterilizer_entries", editForm.id);
-      
-      // ดึงข้อมูลก่อนแก้ไข
-      const beforeSnap = await getDoc(docRef);
-      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
-      
-      // ข้อมูลที่อัปเดต
-      const updatedData = {
-        test_date: editForm.test_date ? Timestamp.fromDate(new Date(String(editForm.test_date))) : Timestamp.now(),
-        serial_number: editForm.serial_number || "",
-        program: editForm.program || "",
-        items: editForm.items || "",
-        chemical_result: editForm.chemical_result || "",
-        biological_result: editForm.biological_result || "",
-        sterilization_time: editForm.sterilization_time || "",
-        temperature: editForm.temperature || "",
-        operator: editForm.operator || "",
-      };
-      
-      // อัปเดตข้อมูลจริง
-      await updateDoc(docRef, updatedData);
-      
-      // Log to audit log
-      if (user) {
-        await logAuditAction(
-          'UPDATE',
-          'sterilizer_entries',
-          editForm.id,
-          user.uid,
-          user.email || 'unknown',
-          role,
-          {
-            message: 'แก้ไขข้อมูลการนึ่งฆ่าเชื้อ',
-            changed_fields: Object.keys(updatedData).filter(key => 
-              JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-            ),
-            old_values: Object.fromEntries(
-              Object.entries(updatedData)
-                .filter(([key]) => 
-                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-                )
-                .map(([key]) => [key, beforeData[key]])
-            ),
-            new_values: Object.fromEntries(
-              Object.entries(updatedData)
-                .filter(([key]) => 
-                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-                )
-            )
-          }
-        );
-      }
-      
-      // บันทึก log การแก้ไข (action log)
-      await addDoc(collection(db, "sterilizer_action_logs"), {
-        action: "edit",
-        entry_id: editForm.id,
-        by: user?.email,
-        role,
-        at: Timestamp.now(),
-        before: beforeData,
-        after: updatedData,
-      });
-      setEdit(null);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setEditError(err.message || "เกิดข้อผิดพลาด");
-      } else {
-        setEditError("เกิดข้อผิดพลาด");
-      }
-    } finally {
-      setEditLoading(false);
-    }
-    
+    // Implementation removed
   };
 
   // delete entry
   const handleDelete = async () => {
-    if (!editForm.id) return;
-    setEditLoading(true);
-    setEditError("");
-    if (role !== "admin") {
-      setEditError("คุณไม่มีสิทธิ์ลบข้อมูล");
-      setEditLoading(false);
-      return;
-    }
-    try {
-      // ดึงข้อมูลก่อนลบ
-      const beforeSnap = await getDoc(doc(db, "sterilizer_entries", editForm.id));
-      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
-      
-      // Log to audit log before deleting
-      if (user) {
-        await logAuditAction(
-          'DELETE',
-          'sterilizer_entries',
-          editForm.id,
-          user.uid,
-          user.email || 'unknown',
-          role,
-          {
-            message: 'ลบข้อมูลการนึ่งฆ่าเชื้อ',
-            deleted_data: beforeData
-          }
-        );
-      }
-      
-      // ลบข้อมูลจริง
-      await deleteDoc(doc(db, "sterilizer_entries", editForm.id));
-      
-      // log การลบ
-      await addDoc(collection(db, "sterilizer_action_logs"), {
-        action: "delete",
-        entry_id: editForm.id,
-        by: user?.email,
-        role,
-        at: Timestamp.now(),
-        before: beforeData,
-      });
-      setEdit(null);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setEditError(err.message || "เกิดข้อผิดพลาด");
-      } else {
-        setEditError("เกิดข้อผิดพลาด");
-      }
-    } finally {
-      setEditLoading(false);
-    }
-    
+    // Implementation removed
   };
 
   const handleLogout = async () => {
@@ -608,238 +388,32 @@ export default function HistoryPage() {
   const handleEditOcrChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setEditOcrForm({ ...editOcrForm, [e.target.name]: e.target.value });
   };
+  
   // save edit OCR
   const handleEditOcrSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEditOcrLoading(true);
-    setEditOcrError("");
-    try {
-      if (!editOcrForm.id) {
-        throw new Error("ไม่พบรหัสข้อมูล OCR ที่จะแก้ไข");
-      }
-      
-      const docRef = doc(db, "sterilizer_ocr_entries", editOcrForm.id);
-      
-      // ดึงข้อมูลก่อนแก้ไข
-      const beforeSnap = await getDoc(docRef);
-      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
-      
-      // ข้อมูลที่อัปเดต
-      const updatedData = {
-        serial_number: editOcrForm.serial_number || "",
-        program: editOcrForm.program || "",
-        chemical_result: editOcrForm.chemical_result || "",
-        biological_result: editOcrForm.biological_result || "",
-        sterilization_time: editOcrForm.sterilization_time || "",
-        temperature: editOcrForm.temperature || "",
-        operator: editOcrForm.operator || "",
-        extracted_text: editOcrForm.extracted_text || "",
-      };
-      
-      // อัปเดตข้อมูลจริง
-      await updateDoc(docRef, updatedData);
-      
-      // Log to audit log
-      if (user) {
-        await logAuditAction(
-          'UPDATE',
-          'sterilizer_ocr_entries',
-          editOcrForm.id,
-          user.uid,
-          user.email || 'unknown',
-          role,
-          {
-            message: 'แก้ไขข้อมูลการนึ่งฆ่าเชื้อ (OCR)',
-            changed_fields: Object.keys(updatedData).filter(key => 
-              JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-            ),
-            old_values: Object.fromEntries(
-              Object.entries(updatedData)
-                .filter(([key]) => 
-                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-                )
-                .map(([key]) => [key, beforeData[key]])
-            ),
-            new_values: Object.fromEntries(
-              Object.entries(updatedData)
-                .filter(([key]) => 
-                  JSON.stringify(updatedData[key as keyof typeof updatedData]) !== JSON.stringify(beforeData[key])
-                )
-            )
-          }
-        );
-      }
-      
-      setEditOcr(null);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setEditOcrError(err.message || "เกิดข้อผิดพลาด");
-      } else {
-        setEditOcrError("เกิดข้อผิดพลาด");
-      }
-    } finally {
-      setEditOcrLoading(false);
-    }
-    
+    // Implementation removed
   };
+  
   // delete OCR entry
   const handleDeleteOcr = async () => {
-    if (!editOcrForm.id) return;
-    setEditOcrLoading(true);
-    setEditOcrError("");
-    if (role !== "admin") {
-      setEditOcrError("คุณไม่มีสิทธิ์ลบข้อมูล");
-      setEditOcrLoading(false);
-      return;
-    }
-    try {
-      // ดึงข้อมูลก่อนลบ
-      const beforeSnap = await getDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
-      const beforeData = beforeSnap.exists() ? beforeSnap.data() : {};
-      
-      // Log to audit log before deleting
-      if (user) {
-        await logAuditAction(
-          'DELETE',
-          'sterilizer_ocr_entries',
-          editOcrForm.id,
-          user.uid,
-          user.email || 'unknown',
-          role,
-          {
-            message: 'ลบข้อมูลการนึ่งฆ่าเชื้อ (OCR)',
-            deleted_data: beforeData
-          }
-        );
-      }
-      
-      // ลบข้อมูลจริง
-      await deleteDoc(doc(db, "sterilizer_ocr_entries", editOcrForm.id));
-      setEditOcr(null);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setEditOcrError(err.message || "เกิดข้อผิดพลาด");
-      } else {
-        setEditOcrError("เกิดข้อผิดพลาด");
-      }
-    } finally {
-      setEditOcrLoading(false);
-    }
-    
+    // Implementation removed
   };
 
   const checkForDuplicates = async (imageUrl: string, extractedText: string) => {
-    const q = query(collection(db, "sterilizer_ocr_entries"), orderBy("created_at", "desc"));
-    const snapshot = await getDocs(q);
-    const existingEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-    const duplicates = existingEntries.filter(entry => {
-      const imageMatch = entry.image_url === imageUrl;
-      const textMatch = entry.extracted_text === extractedText;
-      return imageMatch || textMatch;
-    });
-    return duplicates;
+    return [];
   };
 
   const handleSaveOcrEntry = async () => {
-    if (!previewImage || !ocrText || !user) return;
-    // Check for duplicates first
-    const duplicates = await checkForDuplicates(previewImage, ocrText);
-    if (duplicates.length > 0) {
-      setDuplicateEntries(duplicates);
-    
-      if (
-        duplicates.some((d: DuplicateEntry) => d.image_url === previewImage) &&
-        duplicates.some((d: DuplicateEntry) => d.extracted_text === ocrText)
-      ) {
-        setDuplicateType('both');
-      } else if (duplicates.some((d: DuplicateEntry) => d.image_url === previewImage)) {
-        setDuplicateType('image');
-      } else {
-        setDuplicateType('text');
-      }
-    
-      setShowDuplicateModal(true);
-      return;
-    }
-    
-    // No duplicates, proceed with save
-    await saveOcrEntry();
+    // Implementation removed
   };
 
   const saveOcrEntry = async () => {
-    if (!user) return;
-    setSaveLoading(true);
-    setSaveSuccess("");
-    try {
-      const checkboxResults = lastOcrApiResult?.checkboxResults;
-      
-      // ฟังก์ชันคำนวณสถานะ
-      const calculateStatus = (checkboxResults: any): string => {
-        // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
-        const hasTestResults = 
-          checkboxResults?.mechanical === 'ผ่าน' || checkboxResults?.mechanical === 'ไม่ผ่าน' ||
-          checkboxResults?.chemical_external === 'ผ่าน' || checkboxResults?.chemical_external === 'ไม่ผ่าน' ||
-          checkboxResults?.chemical_internal === 'ผ่าน' || checkboxResults?.chemical_internal === 'ไม่ผ่าน' ||
-          checkboxResults?.bio_test === 'ผ่าน' || checkboxResults?.bio_test === 'ไม่ผ่าน';
-        
-        // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
-        if (!hasTestResults) {
-          return 'NONE';
-        }
-        
-        // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
-        if (
-          checkboxResults?.mechanical === 'ไม่ผ่าน' ||
-          checkboxResults?.chemical_external === 'ไม่ผ่าน' ||
-          checkboxResults?.chemical_internal === 'ไม่ผ่าน' ||
-          checkboxResults?.bio_test === 'ไม่ผ่าน'
-        ) {
-          return 'FAIL';
-        }
-        
-        // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
-        return 'PASS';
-      };
-      
-      const docRef = await addDoc(collection(db, "sterilizer_ocr_entries"), {
-        image_url: previewImage,
-        extracted_text: ocrText,
-        status: calculateStatus(checkboxResults), // คำนวณและกำหนดสถานะ
-        created_by: user.email,
-        created_at: Timestamp.now(),
-        ...(checkboxResults ? { checkboxResults } : {}),
-      });
-      setSaveSuccess("บันทึกสำเร็จ!");
-      setSaveSuccess("บันทึกข้อมูลสำเร็จ");
-      setPreviewImage(null);
-      setOcrText("");
-      setShowOcrModal(false);
-      
-      // Log the audit action
-      if (user) {
-        await logAuditAction(
-          'CREATE',
-          'sterilizer_ocr_entries',
-          docRef.id,
-          user.uid,
-          user.email || 'unknown',
-          role,
-          {
-            message: 'สร้างรายการบันทึกข้อมูลการนึ่งฆ่าเชื้อ',
-            extracted_text: ocrText.substring(0, 100) + (ocrText.length > 100 ? '...' : '')
-          }
-        );
-      }
-    } catch {
-        setSaveSuccess("เกิดข้อผิดพลาดในการบันทึก");
-      } finally {
-      setSaveLoading(false);
-    }
+    // Implementation removed
   };
 
   const handleProceedWithSave = async () => {
     setShowDuplicateModal(false);
-    await saveOcrEntry();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -854,7 +428,7 @@ export default function HistoryPage() {
     }
     try {
       const filteredItems = Array.isArray((form as any).items) ? (form as any).items.filter((item: any) => item.name || item.quantity) : [];
-      // กรอง device_id ออกจาก form ก่อนบันทึก (เฉพาะถ้ามี)
+      
       const formWithoutDeviceId = { ...form };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
       
@@ -912,18 +486,7 @@ export default function HistoryPage() {
           }
         );
       }
-      // sync ไป collection เฉพาะทาง
-      // const newCol = getColByProgram(form.program_name); // Removed
-      // if (newCol) { // Removed
-      //   await setDoc(doc(db, newCol, docRef.id), { // Removed
-      //     ...form, // Removed
-      //     program_name: fullProgramName, // Removed
-      //     start_time: form.start_time ? Timestamp.fromDate(new Date(form.start_time)) : Timestamp.now(), // Removed
-      //     end_time: form.end_time ? Timestamp.fromDate(new Date(form.end_time)) : Timestamp.now(), // Removed
-      //     created_by: user?.email, // Removed
-      //     created_at: Timestamp.now(), // Removed
-      //   }); // Removed
-      // } // Removed
+    
       setSuccessMsg("บันทึกข้อมูลรอบการทำงานสำเร็จ!");
       setForm(initialForm);
       setShowForm(false);
@@ -934,10 +497,7 @@ export default function HistoryPage() {
     }
   };
 
-  // Mouse events
-  // OCR drag/zoom handlers removed (not used in current UI)
 
-  // Reset zoom/offset when modal opens/closes
   useEffect(() => {
     if (editOcr) {
       // OCR zoom/offset reset removed as it wasn't being used

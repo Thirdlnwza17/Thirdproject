@@ -10,8 +10,7 @@ import {
   loginUser, 
   logAuditAction
 } from "@/dbService";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/firebaseConfig";
+
 
 
 interface Bubble {
