@@ -17,22 +17,19 @@ import {
   type SterilizerEntry
 } from '@/dbService';
 
-// Cache for logs with TTL (5 minutes)
 const CACHE_TTL = 5 * 60 * 1000;
-const cache = new Map<string, { data: any; timestamp: number }>();
+const cache = new Map<string, { data: unknown; timestamp: number }>();
 
-// Helper function to generate cache key from request parameters
 function generateCacheKey(url: string): string {
   return url;
 }
 
-// Helper function to get cached data or fetch fresh data
 async function getCachedData<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
   const now = Date.now();
   const cached = cache.get(key);
   
   if (cached && now - cached.timestamp < CACHE_TTL) {
-    return cached.data;
+    return cached.data as T;
   }
   
   const data = await fetchFn();
@@ -57,7 +54,6 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // New endpoint to search items by name or ID
     if (action === 'search-items') {
       const searchTerm = (searchParams.get('q') || '').trim().toUpperCase();
       const limit = parseInt(searchParams.get('limit') || '5');
@@ -68,12 +64,10 @@ export async function GET(request: NextRequest) {
       
       const itemsRef = collection(db, 'items');
       
-      // Check if search term looks like an ID (alphanumeric, at least 5 chars)
       const isIdSearch = /^[A-Z0-9]{5,}$/.test(searchTerm);
       
-      let items: any[] = [];
+      let items: Array<Record<string, unknown>> = [];
       
-      // If search term is 5 or more characters, try ID search first
       if (isIdSearch) {
         // First try exact match
         const q = query(
@@ -88,7 +82,6 @@ export async function GET(request: NextRequest) {
           ...doc.data()
         }));
         
-        // If no exact match, try partial ID match
         if (items.length === 0) {
           const partialIdQuery = query(
             itemsRef,
@@ -183,8 +176,24 @@ export async function GET(request: NextRequest) {
         const fields = searchParams.get('fields')?.split(',').filter(Boolean) || [];
         const useCache = searchParams.get('cache') !== 'false';
 
+        // Define the type for date range filters
+        type DateRange = {
+          '>=': string;
+          '<=': string;
+        };
+
+        // Define the type for filters
+        type LogFilters = {
+          program?: string;
+          status?: string;
+          facility?: string;
+          sterilizer?: string;
+          userId?: string;
+          created_at?: DateRange;
+        };
+
         // Build filters object
-        const filters: Record<string, any> = {};
+        const filters: LogFilters = {};
         if (program) filters.program = program;
         if (status) filters.status = status;
         if (facility) filters.facility = facility;
@@ -246,13 +255,13 @@ export async function GET(request: NextRequest) {
             // Apply field projection if specified
             const items = fields.length > 0
               ? paginatedLogs.map(log => {
-                  const projected: Record<string, any> = { id: log.id };
-                  fields.forEach(field => {
+                  // Create a type-safe projection of the log entry
+                  return fields.reduce<Record<string, unknown>>((projected, field) => {
                     if (field in log) {
                       projected[field] = log[field as keyof SterilizerEntry];
                     }
-                  });
-                  return projected;
+                    return projected;
+                  }, { id: log.id });
                 })
               : paginatedLogs;
                 

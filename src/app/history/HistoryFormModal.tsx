@@ -15,6 +15,7 @@ export interface FormData {
   status: string;
   program?: string;
   sterilizer?: string;
+  potNumber?: string; // 1-10
   
   // Checkbox fields
   prevac?: boolean;
@@ -100,7 +101,6 @@ export default function HistoryFormModal({
     newItems[rowIndex] = { ...newItems[rowIndex], name: value };
     setForm(prev => ({ ...prev, items: newItems }));
     
-    // Update search term and trigger search only if 5+ characters
     setSearchTerm(prev => ({ ...prev, [rowIndex]: value }));
     if (value.length >= 5) {
       setIsSearching(prev => ({ ...prev, [rowIndex]: true }));
@@ -259,6 +259,7 @@ export default function HistoryFormModal({
       
       setForm(prev => ({
         ...prev,
+        potNumber: prev.potNumber || '',
         sterile_staff: userName,
         result_reader: userName,
         // Keep existing values for other fields
@@ -387,6 +388,20 @@ export default function HistoryFormModal({
                   <option value="BOWIE">BOWIE</option>
                 </select>
               </div>
+              <div className="font-medium text-gray-600 flex items-center gap-2 mt-2">หม้อที่
+                <select 
+                  name="potNumber" 
+                  className="border rounded px-2 py-1 ml-2 text-black" 
+                  value={form.potNumber || ''} 
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">เลือกหม้อที่</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                    <option key={num} value={num}>หม้อที่ {num}</option>
+                  ))}
+                </select>
+              </div>
               {/* Show sub-programs as text only when BOWIE or PREVAC is selected */}
               {(form.program === 'BOWIE' || form.program === 'PREVAC') && (
                 <div className="flex flex-col gap-1 mb-2 text-black ml-2 bg-gray-100 p-2 rounded">
@@ -428,6 +443,7 @@ export default function HistoryFormModal({
                     <th className="border p-1 w-8 text-black">NO</th>
                     <th className="border p-1 text-black">ชื่อ/กลุ่มอุปกรณ์</th>
                     <th className="border p-1 w-16 text-black">จำนวน</th>
+                    <th className="border p-1 w-10 text-black">ลบ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -489,6 +505,18 @@ placeholder="พิมพ์อย่างน้อย 5 ตัวอักษ�
                           onInput={(e) => handleInput(e, i, 'quantity')}
                           autoComplete="off"
                         />
+                      </td>
+                      <td className="border p-1 text-center">
+                        {rowCount > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRow(i)}
+                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100"
+                            title="ลบแถวนี้"
+                          >
+                            🗑️
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

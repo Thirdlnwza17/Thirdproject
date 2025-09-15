@@ -240,20 +240,20 @@ export async function deleteLog(program: string, id: string, userId: string = ''
 export interface QueryOptions {
   limit?: number;
   offset?: number;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
   fields?: string[];
   orderBy?: { field: string; direction: 'asc' | 'desc' };
 }
 
 // In-memory cache for development (replace with Redis in production)
-const cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+const cache = new Map<string, { data: unknown; timestamp: number; ttl: number }>();
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
 function getCacheKey(collection: string, options: QueryOptions): string {
   return `${collection}:${JSON.stringify(options)}`;
 }
 
-async function getCachedData(key: string, fetchFn: () => Promise<any>, ttl = DEFAULT_TTL) {
+async function getCachedData(key: string, fetchFn: () => Promise<unknown>, ttl = DEFAULT_TTL) {
   const now = Date.now();
   const cached = cache.get(key);
   
@@ -341,15 +341,21 @@ export async function getAllLogsFromAll(options: QueryOptions = {}) {
       };
     });
   };
-  
-  // Process collections in parallel
+
   const results = await Promise.all(colNames.map(processCollection));
+  
+  
+  const typedResults = results as Array<{
+    items: SterilizerEntry[];
+    total: number;
+    hasMore: boolean;
+  }>;
   
   // Combine results
   return {
-    items: results.flatMap(r => r.items),
-    total: results.reduce((sum, r) => sum + r.total, 0),
-    hasMore: results.some(r => r.hasMore),
+    items: typedResults.flatMap(r => r.items),
+    total: typedResults.reduce((sum, r) => sum + r.total, 0),
+    hasMore: typedResults.some(r => r.hasMore),
     limit,
     offset
   };
@@ -382,9 +388,16 @@ export async function getAggregatedLogs(options: AggregationOptions) {
       const snapshot = await getDocs(q);
       const items = snapshot.docs.map(doc => doc.data());
       
+    
+      type AggregationResult = {
+        _count: number;
+        [key: `sum_${string}`]: number;
+        [key: `avg_${string}`]: number;
+      };
+
       // Simple in-memory aggregation (for large datasets, consider Firestore aggregation queries)
-      const grouped = items.reduce((acc, item) => {
-        const key = item[groupBy];
+      const grouped = items.reduce<Record<string, AggregationResult>>((acc, item) => {
+        const key = item[groupBy] as string;
         if (!acc[key]) {
           acc[key] = { _count: 0 };
           metrics.forEach(metric => {
@@ -396,27 +409,22 @@ export async function getAggregatedLogs(options: AggregationOptions) {
         acc[key]._count++;
         metrics.forEach(metric => {
           if (typeof item[metric] === 'number') {
-            acc[key][`sum_${metric}`] += item[metric];
+            acc[key][`sum_${metric}`] += item[metric] as number;
             acc[key][`avg_${metric}`] = acc[key][`sum_${metric}`] / acc[key]._count;
           }
         });
         
         return acc;
-      }, {} as Record<string, any>);
+      }, {});
       
       return { collection: col, data: Object.entries(grouped).map(([key, value]) => ({ [groupBy]: key, ...value })) };
     }));
     
     return results;
-  }, 5 * 60 * 1000); // 5 minute cache for aggregated data
+  }, 5 * 60 * 1000); 
 } 
 
 
-
-
-
-
-// Get user role by UID or email
 export async function getUserRole(identifier: string): Promise<string> {
   try {
     // First try to find by email
@@ -544,17 +552,17 @@ export async function loginUser(email: string, password: string, selectedUserDat
     
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    // Get the role from selectedUserData without any fallback
+
     const role = selectedUserData.role;
     
     console.log('User authenticated, role:', role);
     
-    // Update user's last login time
+
     await updateProfile(user, {
       displayName: selectedUserData.fullName
     });
     
-    // Update last login time in Firestore
+
     const userDocRef = doc(db, 'users', selectedUserData.id);
     await updateDoc(userDocRef, {
       lastLogin: Timestamp.now()
@@ -594,7 +602,7 @@ export async function loginUser(email: string, password: string, selectedUserDat
       } else if (error.message.includes('user-disabled') || error.message.includes('auth/user-disabled')) {
         throw new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
       }
-      // For any other errors, use the original error message or a generic message
+      
       throw new Error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
     }
   

@@ -156,18 +156,14 @@ export default function EditLoadModal({
   allLoads: any[],
   user: User | null
 }) {
-    // refs สำหรับ input file และ video
+   
   const slipInputRef = useRef<HTMLInputElement>(null);
   const attestInputRef = useRef<HTMLInputElement>(null);
   const slipGalleryRef = useRef<HTMLInputElement>(null);
   const attestGalleryRef = useRef<HTMLInputElement>(null);
-  // removed video/canvas refs - use native file input capture instead
-  
-  // State สำหรับรูป
+ 
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
-  // image2 state removed - attest image is tracked on editForm.image_url_2 directly
-  
-  // State สำหรับจัดการรูปภาพที่กำลังแก้ไข (1=sterile slip, 2=attest)
+ 
   const [currentImageIdx, setCurrentImageIdx] = useState<1 | 2 | null>(null);
   const [showPickerModal, setShowPickerModal] = useState(false);
   const [showWebcamModal, setShowWebcamModal] = useState(false);
@@ -1271,11 +1267,9 @@ export default function EditLoadModal({
     setShowPickerModal(true);
   };
 
-  // Enhanced image processing function with better quality and format handling
   const convertImageFileToJpeg = async (file: File, maxWidth = 1920): Promise<File> => {
     if (!file) throw new Error('No file');
     
-    // Return as is if already in a good format and size
     if (file.type === 'image/jpeg' && file.size < 2 * 1024 * 1024) {
       return file;
     }

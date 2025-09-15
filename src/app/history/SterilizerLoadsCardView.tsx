@@ -48,14 +48,13 @@ export const getStatuses = (load: SterilizerLoad): StatusType[] => {
                    load.items.length === 0 || 
                    load.items.every((item: SterilizerItem) => !item.quantity || item.quantity === '0' || item.quantity === 0);
   
-  // Check if any test results are selected (ผ่าน or ไม่ผ่าน)
+  
   const hasTestResults = 
     load.mechanical === 'ผ่าน' || load.mechanical === 'ไม่ผ่าน' ||
     load.chemical_external === 'ผ่าน' || load.chemical_external === 'ไม่ผ่าน' ||
     load.chemical_internal === 'ผ่าน' || load.chemical_internal === 'ไม่ผ่าน' ||
     load.bio_test === 'ผ่าน' || load.bio_test === 'ไม่ผ่าน';
   
-  // Check for any failed tests
   const hasFailed = 
     load.mechanical === 'ไม่ผ่าน' || 
     load.chemical_external === 'ไม่ผ่าน' || 

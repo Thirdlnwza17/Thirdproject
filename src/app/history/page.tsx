@@ -158,10 +158,6 @@ const initialForm: FormData = {
   items: Array(45).fill(null).map(() => ({ name: '', quantity: '' }))
 };
 
-const SLIP_KEYWORDS = [
-  'BAUMER', 'PROGRAM', 'TEMPERATURE', 'STERILIZATION TIME', 'VACUUM PULSE', 'DRYING TIME', 'END OF CYCLE', 'OPER'
-];
-
 import { SterilizerEntry } from "@/dbService";
 
 export default function HistoryPage() {
@@ -451,31 +447,61 @@ export default function HistoryPage() {
       return;
     }
     try {
-      const filteredItems = Array.isArray((form as any).items) ? (form as any).items.filter((item: any) => item.name || item.quantity) : [];
+      // Define interface for form items
+      interface FormItem {
+        name?: unknown;
+        quantity?: unknown;
+        [key: string]: unknown;
+      }
+
+      // Type guard to check if value is FormItem
+      const isFormItem = (item: unknown): item is FormItem => {
+        return typeof item === 'object' && item !== null;
+      };
+
+      // Type guard to check if value is FormData
+      const isFormData = (data: unknown): data is Record<string, unknown> => {
+        return typeof data === 'object' && data !== null;
+      };
+
+      const formItems = isFormData(form) && 'items' in form ? form.items : [];
+      const filteredItems = Array.isArray(formItems) 
+        ? formItems.filter((item: unknown) => {
+            if (!isFormItem(item)) return false;
+            return Boolean(item.name) || Boolean(item.quantity);
+          })
+        : [];
       
       const formWithoutDeviceId = { ...form };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
-      
-      // ฟังก์ชันคำนวณสถานะ
-      const calculateStatus = (formData: any): string => {
-        // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
-        const hasTestResults = 
-          formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
-          formData.chemical_external === 'ผ่าน' || formData.chemical_external === 'ไม่ผ่าน' ||
-          formData.chemical_internal === 'ผ่าน' || formData.chemical_internal === 'ไม่ผ่าน' ||
-          formData.bio_test === 'ผ่าน' || formData.bio_test === 'ไม่ผ่าน';
+     
+      // Type guard to check if a value is a valid test result
+      const isTestResult = (value: unknown): value is 'ผ่าน' | 'ไม่ผ่าน' => {
+        return value === 'ผ่าน' || value === 'ไม่ผ่าน';
+      };
+
+      const calculateStatus = (formData: Record<string, unknown>): string => {
+        // Safely access properties with type checking
+        const mechanical = formData.mechanical;
+        const chemicalExternal = formData.chemical_external;
+        const chemicalInternal = formData.chemical_internal;
+        const bioTest = formData.bio_test;
         
-        // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+        const hasTestResults = 
+          isTestResult(mechanical) || 
+          isTestResult(chemicalExternal) || 
+          isTestResult(chemicalInternal) || 
+          isTestResult(bioTest);
+        
         if (!hasTestResults) {
           return 'NONE';
         }
         
-        // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
         if (
-          formData.mechanical === 'ไม่ผ่าน' ||
-          formData.chemical_external === 'ไม่ผ่าน' ||
-          formData.chemical_internal === 'ไม่ผ่าน' ||
-          formData.bio_test === 'ไม่ผ่าน'
+          (isTestResult(mechanical) && mechanical === 'ไม่ผ่าน') ||
+          (isTestResult(chemicalExternal) && chemicalExternal === 'ไม่ผ่าน') ||
+          (isTestResult(chemicalInternal) && chemicalInternal === 'ไม่ผ่าน') ||
+          (isTestResult(bioTest) && bioTest === 'ไม่ผ่าน')
         ) {
           return 'FAIL';
         }
