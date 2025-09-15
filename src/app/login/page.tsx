@@ -308,7 +308,7 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent text-center mb-2">
           เข้าสู่ระบบ
         </h1>
-        <p className="text-gray-500 text-center mb-8">กรุณากรอกชื่อ-นามสกุล รหัสพนักงาน ของคุณ</p>
+        <p className="text-gray-500 text-center mb-8">กรุณากรอกรหัสพนักงาน-รหัส ของคุณ</p>
         
         <form className="w-full space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-5">

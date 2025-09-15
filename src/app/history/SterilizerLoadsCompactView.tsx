@@ -2,10 +2,8 @@
 import React, { useState, useCallback } from 'react';
 import { getStatuses } from './SterilizerLoadsCardView';
 import EditLoadModal from './EditLoadModal';
-import { User } from 'firebase/auth';
-import { Timestamp } from '@/dbService';
+import { FirebaseUser as User, Timestamp } from '@/dbService';
 
-// Extend the Firebase User type with our custom properties
 type AppUser = User & {
   role?: 'admin' | 'operator';
 };

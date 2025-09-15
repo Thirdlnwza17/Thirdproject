@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Image from 'next/image';
-import { onAuthStateChanged, User, signOut } from "firebase/auth";
-import { auth, db } from "../../firebaseConfig";
+import { useRouter } from "next/navigation";
 import { 
   logAuditAction, 
   getUserRole, 
@@ -19,8 +17,18 @@ import {
   addDoc, 
   getDocs, 
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  FirebaseUser,
+  firebaseAuthStateChanged,
+  firebaseSignOut,
+  signOutUser,
+  auth,
+  db
 } from "@/dbService";
+
+type AppUser = FirebaseUser & {
+  role?: string;
+};
 import Link from "next/link";
 import Swal from 'sweetalert2';
 
@@ -49,7 +57,7 @@ interface DuplicateEntry {
 
 
 
-const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
+const UserDropdown = ({ user, role, onLogout }: { user: AppUser | null, role: string, onLogout: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -77,6 +85,7 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
             width={32} 
             height={32}
             className="w-full h-full object-cover"
+            unoptimized
           />
         </div>
         <div className="flex flex-col items-start min-w-0">
@@ -171,14 +180,14 @@ export default function HistoryPage() {
     setClearAllFiltersTrigger(t => t + 1);
     setDateRange({ startDate: '', endDate: '' });
   };
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [entries, setEntries] = useState<SterilizerEntry[]>([]); // main entry state
+  const [role, setRole] = useState<string>('');
+  const [entries, setEntries] = useState<SterilizerEntry[]>([]);
   const [edit, setEdit] = useState<SterilizerEntry | null>(null);
   const [editForm, setEditForm] = useState<Partial<SterilizerEntry>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
-  const [role, setRole] = useState<string>("");
   const router = useRouter();
   const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -329,30 +338,41 @@ export default function HistoryPage() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
-      if (!firebaseUser) {
-        router.replace("/login");
-      } else {
-        try {
-         
-          console.log('Getting role for user:', firebaseUser.email);
-          const userRole = await getUserRole(firebaseUser.email || firebaseUser.uid);
-          console.log('User role in history page:', userRole);
-          setRole(userRole);
-          
-         
-          console.log('User role set to:', userRole);
-        } catch (error) {
-          console.error('Error getting user role:', error);
-      
-          setRole('operator');
+    const unsubscribe = firebaseAuthStateChanged(auth, 
+      (user: FirebaseUser | null) => {
+        if (user) {
+          setUser(user as AppUser);
+          // Get user role
+          (async () => {
+            try {
+              console.log('Getting role for user:', user.email);
+              const userRole = await getUserRole(user.email || user.uid);
+              console.log('User role in history page:', userRole);
+              setRole(userRole);
+              setLoading(false);
+            } catch (error) {
+              console.error('Error getting user role:', error);
+              setRole('operator');
+              setLoading(false);
+            }
+          })();
+        } else {
+          setUser(null);
+          setLoading(false);
+          router.replace("/login");
         }
+      },
+      (error: Error) => {
+        console.error('Auth state error:', error);
+        setLoading(false);
+      },
+      () => {
+    
       }
-    });
-      return () => {
-      unsubscribe();
+    );
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
     };
   }, [router]);
 
@@ -379,8 +399,12 @@ export default function HistoryPage() {
   };
 
   const handleLogout = async () => {
-    await auth.signOut();
-    router.replace("/login");
+    try {
+      await signOutUser(user?.uid || '', user?.email || 'unknown', role || 'unknown');
+      router.replace("/login");
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
  

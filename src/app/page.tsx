@@ -74,7 +74,7 @@ export default function Home() {
       ctx.fill();
     };
 
-    // Update bubble positions
+   
     const updateBubbles = () => {
       const bubbles = bubblesRef.current;
       
@@ -216,7 +216,7 @@ export default function Home() {
           </h1>
           
           <p className="text-gray-600 text-base md:text-lg leading-relaxed">
-            ระบบข้อมูลการติดตามคุณภาพการทำฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์
+            ระบบข้อมูลการติดตามคุณภาพการฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์
           </p>
           
           <div className="pt-4">

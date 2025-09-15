@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
-import { User } from 'firebase/auth';
+import { FirebaseUser as User } from '@/dbService';
 import { debounce } from 'lodash';
 
 interface Item {

@@ -5,7 +5,7 @@ import {
   QueryDocumentSnapshot, QueryConstraint, query as buildQuery
 } from 'firebase/firestore';
 
-// Re-export Firestore functions and types
+
 export {
   Timestamp,
   collection,
@@ -23,7 +23,7 @@ export {
   serverTimestamp
 };
 
-// Export query builder functions
+
 export const query = buildQuery;
 export const limit = limitFn;
 import { 
@@ -44,6 +44,13 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 
+export type { User as FirebaseUser } from 'firebase/auth';
+export { 
+  signOut as firebaseSignOut,
+  onAuthStateChanged as firebaseAuthStateChanged
+} from 'firebase/auth';
+
+export { auth, db } from './firebaseConfig';
 
 export interface UserData {
   id: string;
@@ -574,10 +581,25 @@ export async function loginUser(email: string, password: string, selectedUserDat
     console.error("Login error:", error);
   
     if (error instanceof Error) {
-      throw new Error(error.message || "Login failed");
+      // Check for specific Firebase auth error codes
+      if (error.message.includes('wrong-password') || error.message.includes('auth/wrong-password') || 
+          error.message.includes('invalid-credential') || error.message.includes('auth/invalid-credential')) {
+        throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+      } else if (error.message.includes('invalid-email') || error.message.includes('auth/invalid-email')) {
+        throw new Error('รูปแบบรหัสพนักงานไม่ถูกต้อง');
+      } else if (error.message.includes('user-not-found') || error.message.includes('auth/user-not-found')) {
+        throw new Error('ไม่พบผู้ใช้งานนี้ในระบบ');
+      } else if (error.message.includes('too-many-requests') || error.message.includes('auth/too-many-requests')) {
+        throw new Error('มีการพยายามเข้าสู่ระบบหลายครั้งเกินไป กรุณาลองใหม่ในภายหลัง');
+      } else if (error.message.includes('user-disabled') || error.message.includes('auth/user-disabled')) {
+        throw new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
+      }
+      // For any other errors, use the original error message or a generic message
+      throw new Error(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
     }
   
-    throw new Error("Login failed");
+    // Fallback for non-Error objects
+    throw new Error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
   }
 }
 export function getCurrentUser() {

@@ -138,7 +138,7 @@ export default function SterilizerLoadsCardView({
     setChemicalExternalFilter('');
     setChemicalInternalFilter('');
     setBioTestFilter('');
-    setSortBy('date');
+    setSortBy('lastUpdated');
     setSortOrder('desc');
     setShowAdvancedFilters(false);
     
@@ -835,6 +835,8 @@ export default function SterilizerLoadsCardView({
               >
                 <option value="date">วันที่</option>
                 <option value="lastUpdated">อัพเดทล่าสุด</option>
+          
+                
                 
               </select>
               <select

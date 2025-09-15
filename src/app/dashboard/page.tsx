@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { signOut as firebaseSignOut, onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../../firebaseConfig";
 import Link from "next/link";
 import Image from 'next/image';
 import { VercelDateRangePicker } from "@/components/VercelDateRangePicker";
@@ -13,7 +11,11 @@ import {
   logAuditAction,
   deleteLog as deleteLogService,
   updateLog as updateLogService,
-  signOutUser
+  signOutUser,
+  firebaseSignOut,
+  firebaseAuthStateChanged as onAuthStateChanged,
+  FirebaseUser as User,
+  auth
 } from "@/dbService";
 
 import { MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
@@ -43,12 +45,12 @@ const DashboardCard = ({
   </div>
 );
 
-// User dropdown component
+
 const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -515,7 +517,7 @@ export default function DashboardPage() {
               <span className="text-sky-400">Central Supply Sterile Quality</span>{' '}
               <span className="text-blue-700">information system</span>
             </h1>
-            <p className="text-lg md:text-xl text-cyan-600 mb-4 text-center">ระบบข้อมูลการติดตามคุณภาพการทำฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์</p>
+            <p className="text-lg md:text-xl text-cyan-600 mb-4 text-center">ระบบข้อมูลการติดตามคุณภาพของการฆ่าเชื้ออุปกรณ์เวชภัณฑ์ทางการแพทย์</p>
           </div>
         </div>
         

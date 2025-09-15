@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { debounce } from 'lodash';
+import { FirebaseUser } from '@/dbService';
 
 export interface Item {
   id: string;
@@ -41,7 +42,7 @@ export interface FormData {
   [key: string]: string | boolean | number | undefined | Array<{ name: string; quantity: string | number }>;
 }
 
-import { User } from 'firebase/auth';
+
 
 interface FormModalProps {
   show: boolean;
@@ -52,7 +53,7 @@ interface FormModalProps {
   submitting: boolean;
   errorMsg: string;
   successMsg: string;
-  user: User | null;
+  user: FirebaseUser | null;
 }
 
 export default function HistoryFormModal({ 
