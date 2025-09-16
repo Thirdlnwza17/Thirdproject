@@ -704,7 +704,7 @@ const getRandomDurationByProgram = (program: string): string => {
             }
 
             // แจ้งเตือนเมื่อพบข้อมูล
-            let alertMessage = messageParts.length > 0
+            const alertMessage = messageParts.length > 0
               ? `ตั้งค่าจาก OCR: ${messageParts.join(', ')}`
               : '';
 
