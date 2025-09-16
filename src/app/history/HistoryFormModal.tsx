@@ -11,10 +11,11 @@ export interface Item {
 }
 
 export interface FormData {
-  // Basic fields
+
   status: string;
   program?: string;
   sterilizer?: string;
+  cycleDate?: string; // YYYY/MM/DD
   potNumber?: string; // 1-10
   
   // Checkbox fields
@@ -48,7 +49,7 @@ export interface FormData {
 interface FormModalProps {
   show: boolean;
   onClose: () => void;
-  onSubmit: (e: React.FormEvent) => Promise<void> | void;
+  onSubmit: (formData: FormData) => Promise<void> | void;
   form: FormData;
   setForm: (v: React.SetStateAction<FormData>) => void;
   submitting: boolean;
@@ -73,6 +74,7 @@ export default function HistoryFormModal({
   const [searchResults, setSearchResults] = useState<Record<number, Item[]>>({});
   const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
   const [isSearching, setIsSearching] = useState<Record<number, boolean>>({});
+  const [dateError, setDateError] = useState<string>('');
 
   // Debounced search function
   const searchItems = useCallback(debounce(async (term: string, rowIndex: number) => {
@@ -202,9 +204,9 @@ export default function HistoryFormModal({
       formData.chemical_internal === 'ผ่าน' || formData.chemical_internal === 'ไม่ผ่าน' ||
       formData.bio_test === 'ผ่าน' || formData.bio_test === 'ไม่ผ่าน';
     
-    // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า NONE
+    // ถ้าไม่มีการเลือกผลการทดสอบเลย ให้คืนค่า Waiting
     if (!hasTestResults) {
-      return 'NONE';
+      return 'Waiting';
     }
     
     // ถ้ามีการเลือกผลการทดสอบ ให้ตรวจสอบว่ามีการ "ไม่ผ่าน" หรือไม่
@@ -221,16 +223,40 @@ export default function HistoryFormModal({
     return 'PASS';
   };
 
+  const validateDate = (dateStr: string): boolean => {
+    const dateRegex = /^\d{4}\/(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])$/;
+    if (!dateRegex.test(dateStr)) {
+      setDateError('รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น YYYY/MM/DD');
+      return false;
+    }
+    
+    const [year, month, day] = dateStr.split('/').map(Number);
+    const date = new Date(year, month - 1, day);
+    
+    if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+      setDateError('วันที่ไม่ถูกต้อง');
+      return false;
+    }
+    
+    setDateError('');
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Validate date before submission
+    if (form.cycleDate && !validateDate(form.cycleDate)) {
+      return;
+    }
     try {
       // คำนวณและกำหนดสถานะก่อนส่งข้อมูล
       const formDataWithStatus = {
         ...form,
+        date: form.cycleDate, // map cycleDate to date
         status: calculateStatus(form)
       };
-      
-      await Promise.resolve(onSubmit(e));
+      delete formDataWithStatus.cycleDate;
+      await Promise.resolve(onSubmit(formDataWithStatus));
       // Show success message with SweetAlert2
       await Swal.fire({
         title: 'สำเร็จ!',
@@ -256,10 +282,13 @@ export default function HistoryFormModal({
   useEffect(() => {
     if (show && user) {
       const userName = user.displayName || user.email || '';
+      const today = new Date();
+      const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
       
       setForm(prev => ({
         ...prev,
         potNumber: prev.potNumber || '',
+        cycleDate: formattedDate,
         sterile_staff: userName,
         result_reader: userName,
         // Keep existing values for other fields
@@ -373,12 +402,41 @@ export default function HistoryFormModal({
         >
           ×  
         </button>
-        <h2 className="text-2xl font-bold mb-4 text-blue-900 text-center text-black">LOAD IN DATA - บันทึกรอบการทำงาน</h2>
+        <h2 className="text-2xl font-bold mb-4 text-blue-900 text-center">LOAD IN DATA - บันทึกรอบการทำงาน</h2>
         <form className="flex flex-col gap-4 text-black" onSubmit={handleSubmit}>
           <div className="flex flex-col md:flex-row gap-6">
             {/* ฝั่งซ้าย: ข้อมูลรอบ/checkbox */}
             <div className="flex-1 min-w-[260px] flex flex-col gap-2">
-              <label className="font-medium text-gray-600">รอบการฆ่าเชื้อที่ <input name="sterilizer" type="text" className="border rounded px-2 py-1 w-full bg-gray-100 text-gray-500" value={form.sterilizer || ''} readOnly /></label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="font-medium text-gray-600">
+                  วันที่
+                  <input 
+                    name="cycleDate" 
+                    type="text" 
+                    className={`border rounded px-2 py-1 w-full ${dateError ? 'border-red-500' : 'border-gray-300'}`} 
+                    value={form.cycleDate || ''} 
+                    onChange={(e) => {
+                      handleChange(e);
+                      // Clear error when user starts typing
+                      if (dateError) setDateError('');
+                    }}
+                    onBlur={() => form.cycleDate && validateDate(form.cycleDate)}
+                    placeholder="YYYY/MM/DD"
+                    required
+                  />
+                </label>
+                <label className="font-medium text-gray-600">
+                  รอบการฆ่าเชื้อที่
+                  <input 
+                    name="sterilizer" 
+                    type="text" 
+                    className="border rounded px-2 py-1 w-full" 
+                    value={form.sterilizer || ''} 
+                    onChange={handleChange}
+                    placeholder="ระบุรอบการฆ่าเชื้อ"
+                  />
+                </label>
+              </div>
               <div className="font-medium text-gray-600 flex items-center gap-2">โปรแกรมที่ใช้
                 <select name="program" className="border rounded px-2 py-1 ml-2 text-black" value={form.program || ''} onChange={handleChange}>
                   <option value="">เลือกโปรแกรม</option>
@@ -398,7 +456,7 @@ export default function HistoryFormModal({
                 >
                   <option value="">เลือกหม้อที่</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                    <option key={num} value={num}>หม้อที่ {num}</option>
+                    <option key={num} value={num}> {num}</option>
                   ))}
                 </select>
               </div>
@@ -527,15 +585,27 @@ placeholder="พิมพ์อย่างน้อย 5 ตัวอักษ�
                 onClick={addRow}
                 className="mt-2 bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded text-sm"
               >
-                + เพิ่มแถว
+                เพิ่มรายการ
               </button>
             </div>
           </div>
           <div className="flex gap-2 mt-4 justify-center">
-            <button type="submit" disabled={submitting} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-8 rounded transition-all disabled:opacity-60">
-              {submitting ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
+            <button
+              type="submit"
+              disabled={submitting || !!dateError}
+              className={`font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                submitting || dateError
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+              }`}
+            >
+              {submitting ? 'กำลังบันทึก...' : 'บันทึก'}
             </button>
-            <button type="button" onClick={onClose} className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-8 rounded transition-all">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-8 rounded transition-all"
+            >
               ยกเลิก
             </button>
           </div>
@@ -545,4 +615,4 @@ placeholder="พิมพ์อย่างน้อย 5 ตัวอักษ�
       </div>
     </div>
   );
-} 
+}

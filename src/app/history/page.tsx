@@ -378,15 +378,63 @@ export default function HistoryPage() {
 
   // handle edit form change
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setEditForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   // save edit
-  const handleEditSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEditSave = async (formData: any) => {
     setEditLoading(true);
     setEditError("");
-    // Implementation removed
+    
+    try {
+      if (!edit) return;
+      
+      // Ensure sterilizer field is included in the update
+      const updateData = {
+        ...formData,
+        sterilizer: formData.sterilizer || '',
+        updated_at: serverTimestamp()
+      };
+      
+      await updateDoc(doc(db, 'sterilizer_loads', edit.id), updateData);
+      
+      // Log the edit action
+      if (user) {
+        await logAuditAction(
+          'UPDATE',
+          'sterilizer_loads',
+          edit.id,
+          user.uid,
+          user.email || 'unknown',
+          role || 'operator',
+          {
+            field: 'all',
+            oldValue: JSON.stringify(edit),
+            newValue: JSON.stringify(updateData)
+          }
+        );
+      }
+      
+      setEdit(null);
+      setEditForm({});
+      
+      Swal.fire({
+        title: 'บันทึกสำเร็จ',
+        text: 'อัปเดตข้อมูลเรียบร้อยแล้ว',
+        icon: 'success',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      });
+    } catch (error) {
+      console.error('Error updating document: ', error);
+      setEditError('เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   // delete entry
@@ -436,8 +484,8 @@ export default function HistoryPage() {
     setShowDuplicateModal(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // รับ FormData ที่มีฟิลด์ date (จาก HistoryFormModal)
+  const handleSubmit = async (formData: any) => {
     setSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -447,78 +495,20 @@ export default function HistoryPage() {
       return;
     }
     try {
-      // Define interface for form items
-      interface FormItem {
-        name?: unknown;
-        quantity?: unknown;
-        [key: string]: unknown;
-      }
-
-      // Type guard to check if value is FormItem
-      const isFormItem = (item: unknown): item is FormItem => {
-        return typeof item === 'object' && item !== null;
-      };
-
-      // Type guard to check if value is FormData
-      const isFormData = (data: unknown): data is Record<string, unknown> => {
-        return typeof data === 'object' && data !== null;
-      };
-
-      const formItems = isFormData(form) && 'items' in form ? form.items : [];
-      const filteredItems = Array.isArray(formItems) 
-        ? formItems.filter((item: unknown) => {
-            if (!isFormItem(item)) return false;
-            return Boolean(item.name) || Boolean(item.quantity);
-          })
-        : [];
-      
-      const formWithoutDeviceId = { ...form };
+      // Remove device_id if present
+      const formWithoutDeviceId = { ...formData };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
-     
-      // Type guard to check if a value is a valid test result
-      const isTestResult = (value: unknown): value is 'ผ่าน' | 'ไม่ผ่าน' => {
-        return value === 'ผ่าน' || value === 'ไม่ผ่าน';
-      };
-
-      const calculateStatus = (formData: Record<string, unknown>): string => {
-        // Safely access properties with type checking
-        const mechanical = formData.mechanical;
-        const chemicalExternal = formData.chemical_external;
-        const chemicalInternal = formData.chemical_internal;
-        const bioTest = formData.bio_test;
-        
-        const hasTestResults = 
-          isTestResult(mechanical) || 
-          isTestResult(chemicalExternal) || 
-          isTestResult(chemicalInternal) || 
-          isTestResult(bioTest);
-        
-        if (!hasTestResults) {
-          return 'NONE';
-        }
-        
-        if (
-          (isTestResult(mechanical) && mechanical === 'ไม่ผ่าน') ||
-          (isTestResult(chemicalExternal) && chemicalExternal === 'ไม่ผ่าน') ||
-          (isTestResult(chemicalInternal) && chemicalInternal === 'ไม่ผ่าน') ||
-          (isTestResult(bioTest) && bioTest === 'ไม่ผ่าน')
-        ) {
-          return 'FAIL';
-        }
-        
-        // ถ้าทุกอย่างผ่าน ให้คืนค่า PASS
-        return 'PASS';
-      };
-
+      // Filter items
+      const filteredItems = Array.isArray(formWithoutDeviceId.items)
+        ? formWithoutDeviceId.items.filter((item: any) => Boolean(item.name) || Boolean(item.quantity))
+        : [];
       // Add the new document
       const docRef = await addDoc(collection(db, "sterilizer_loads"), {
         ...formWithoutDeviceId,
         items: filteredItems,
-        status: calculateStatus(formWithoutDeviceId), // คำนวณและกำหนดสถานะ
         created_by: user?.email,
         created_at: Timestamp.now(),
       });
-      
       // Log the audit action
       if (user) {
         await logAuditAction(
@@ -530,13 +520,12 @@ export default function HistoryPage() {
           role,
           {
             message: 'สร้างรายการบันทึกข้อมูลการนึ่งฆ่าเชื้อ (เพิ่มด้วยมือ)',
-            program: form.program || 'ไม่ระบุโปรแกรม',
-            sterilizer: form.sterilizer || 'ไม่ระบุเครื่องนึ่ง',
+            program: formData.program || 'ไม่ระบุโปรแกรม',
+            sterilizer: formData.sterilizer || 'ไม่ระบุเครื่องนึ่ง',
             items_count: filteredItems.length
           }
         );
       }
-    
       setSuccessMsg("บันทึกข้อมูลรอบการทำงานสำเร็จ!");
       setForm(initialForm);
       setShowForm(false);

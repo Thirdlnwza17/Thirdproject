@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
@@ -12,123 +13,6 @@ interface Item {
 import { collection, getDocs, doc, getDoc } from '@/dbService';
 import { logAuditAction } from '@/dbService';
 
-// Function to detect dominant colors in an image
-const getImageColors = (imageUrl: string): Promise<string[]> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve([]);
-      
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0, img.width, img.height);
-      
-      // Sample points from the image
-      const samplePoints = [
-        [0.2, 0.2], [0.5, 0.2], [0.8, 0.2],
-        [0.2, 0.5], [0.5, 0.5], [0.8, 0.5],
-        [0.2, 0.8], [0.5, 0.8], [0.8, 0.8]
-      ];
-      
-      const colors = samplePoints.map(([x, y]) => {
-        const pixelX = Math.floor(x * img.width);
-        const pixelY = Math.floor(y * img.height);
-        const pixel = ctx.getImageData(pixelX, pixelY, 1, 1).data;
-        return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
-      });
-      
-      resolve(colors);
-    };
-    img.onerror = () => resolve([]);
-    img.src = imageUrl;
-  });
-};
-
-// Function to check if color is in green/yellow range
-const isGreenOrYellow = (r: number, g: number, b: number): boolean => {
-  const [h, s, l] = rgbToHsl(r, g, b);
-  // Green: 60-180 degrees, Yellow: 45-75 degrees
-  return ((h >= 60 && h <= 180) || (h >= 45 && h <= 75)) && s > 0.3 && l > 0.2;
-};
-
-// Function to check if color is in orange/brown range
-const isOrangeBrown = (r: number, g: number, b: number): boolean => {
-  // Convert RGB to HSL for better color range detection
-  const [h, s, l] = rgbToHsl(r, g, b);
-  // Orange: 15-45 degrees, Brown: 20-40 degrees with lower lightness
-  return (h >= 15 && h <= 45 && s > 0.2 && l > 0.2 && l < 0.7);
-};
-
-// Function to check if color is in dark blue/black/gray range
-const isDarkBlueBlackGray = (r: number, g: number, b: number): boolean => {
-  // Dark colors with low lightness
-  const [h, s, l] = rgbToHsl(r, g, b);
-  return (l < 0.4 || (h >= 200 && h <= 260 && s > 0.3 && l < 0.5));
-};
-
-// Function to check if color is in dark brown/pattern range
-const isDarkBrownPattern = (r: number, g: number, b: number): boolean => {
-  const [h, s, l] = rgbToHsl(r, g, b);
-  // Dark brown: 20-40 degrees with low lightness
-  return (h >= 20 && h <= 40 && l < 0.4 && s > 0.3);
-};
-
-// Helper function to convert RGB to HSL
-const rgbToHsl = (r: number, g: number, b: number): [number, number, number] => {
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s;
-  const l = (max + min) / 2;
-
-  if (max === min) {
-    h = s = 0; // achromatic
-  } else {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
-  }
-
-  return [h * 360, s, l];
-};
-
-// Function to check image colors and return test results
-const checkImageColors = async (imageUrl: string) => {
-  const colors = await getImageColors(imageUrl);
-  
-  let hasOrangeBrown = false;
-  let hasDarkBlueBlackGray = false;
-  let hasDarkBrownPattern = false;
-  let hasGreenOrYellow = false;
-  for (const color of colors) {
-    const [r, g, b] = color.match(/\d+/g)?.map(Number) || [0, 0, 0];
-    
-    if (isGreenOrYellow(r, g, b)) {
-      hasGreenOrYellow = true;
-      // If we find green/yellow, no need to check other colors
-      break;
-    }
-    
-    if (isOrangeBrown(r, g, b)) hasOrangeBrown = true;
-    if (isDarkBlueBlackGray(r, g, b)) hasDarkBlueBlackGray = true;
-    if (isDarkBrownPattern(r, g, b)) hasDarkBrownPattern = true;
-    
-    // If we've found all colors we're looking for, no need to continue
-    if (hasOrangeBrown && hasDarkBlueBlackGray && hasDarkBrownPattern) break;
-  }
-  return { hasOrangeBrown, hasDarkBlueBlackGray, hasDarkBrownPattern, hasGreenOrYellow };
-};
 
 // Import db from firebaseConfig
 import { db } from '../../firebaseConfig';
@@ -679,6 +563,13 @@ export default function EditLoadModal({
         return;
       }
       if (idx === 1) {
+        // Auto-tick ผ่าน for mechanical, chemical_external, chemical_internal
+        setEditForm((prev: any) => ({
+          ...prev,
+          mechanical: 'ผ่าน',
+          chemical_external: 'ผ่าน',
+          chemical_internal: 'ผ่าน'
+        }));
         // OCR + Claude AI ตรวจสอบ slip เฉพาะช่อง 1
         startOcrProgress();
         try {
@@ -712,112 +603,96 @@ export default function EditLoadModal({
             return;
           }
           if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
-          
-          // ตรวจสอบสีของรูปภาพ
-          const colorResults = await checkImageColors(base64);
-          
-          // ตั้งค่าผลการทดสอบตามสีที่ตรวจพบ
-          const testResultsUpdate: any = {
-            mechanical: 'ผ่าน'  // ตั้งค่าเป็น 'ผ่าน' เสมอ
-          };
-          
-          // ไม่ต้องตรวจสอบข้อความแสดงความผิดพลาดของกลไกจาก OCR อีกต่อไป
-          // เนื่องจากต้องการให้ผ่านเสมอ
-          
-          // ตรวจสอบสีที่แสดงว่าผ่าน (สีส้ม/น้ำตาล/น้ำเงิน/ดำ/เทา/น้ำตาลเข้ม)
-          const hasPassingColors = colorResults.hasOrangeBrown || 
-                                 colorResults.hasDarkBlueBlackGray || 
-                                 colorResults.hasDarkBrownPattern;
-          
-          // ถ้าพบสีที่แสดงว่าผ่าน ให้ติ๊กผ่านทั้งคู่
-          if (hasPassingColors) {
-            testResultsUpdate.chemical_external = 'ผ่าน';
-            testResultsUpdate.chemical_internal = 'ผ่าน';
-          } 
-          // ถ้าไม่เจอสีอะไรเลย ไม่ต้องตั้งค่าอะไร (ไม่ต้องติ๊กผ่านหรือไม่ผ่าน)
-          // ถ้าเจอสีเขียว/เหลือง ให้ติ๊กไม่ผ่านทั้งคู่
-          else if (colorResults.hasGreenOrYellow) {
-            testResultsUpdate.chemical_external = 'ไม่ผ่าน';
-            testResultsUpdate.chemical_internal = 'ไม่ผ่าน';
-          }
-          
-          // แจ้งเตือนผลการตรวจสอบสี (เฉพาะที่เจอ)
-          const colorAlerts = [];
-          if (colorResults.hasGreenOrYellow) {
-            colorAlerts.push('ตรวจพบสีเขียว/เหลือง: ตั้งค่าผลเทปเคมีภายนอกและภายในเป็น "ไม่ผ่าน"');
-          } else if (colorResults.hasOrangeBrown || colorResults.hasDarkBlueBlackGray || colorResults.hasDarkBrownPattern) {
-            // ถ้าพบสีที่แสดงว่าผ่าน (ส้ม/น้ำตาล/น้ำเงิน/ดำ/เทา/น้ำตาลเข้ม)
-            colorAlerts.push('ตรวจพบสีที่แสดงว่าผ่าน: ตั้งค่าผลเทปเคมีภายนอกและภายในเป็น "ผ่าน"');
-          }
-          // ไม่ต้องแจ้งเตือนถ้าไม่พบสีใดๆ
-          
-          if (colorAlerts.length > 0) {
-            Swal.fire({
-              title: 'ตรวจพบการเปลี่ยนแปลงสี',
-              html: colorAlerts.join('<br>'),
-              icon: 'info',
-              timer: 4000,
-              showConfirmButton: false
-            });
-          }
-          
           // ถ้าเป็นรูปที่ 1 (sterile slip) ให้ทำ OCR เพื่อหาและตั้งค่าวันที่
           try {
             // ใช้ข้อความ OCR ที่ได้จาก API โดยตรง
             const ocrText = ocrRaw;
             console.log('OCR Text:', ocrText); // Debug log
-            
+
             // ดึงวันที่จากข้อความ OCR
             const extractedDate = extractDateFromOCR(ocrText);
             console.log('Extracted Date:', extractedDate); // Debug log
-            
+
             // ดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
             const sterilizerInfo = extractSterilizerInfo(ocrText);
-            
+
             // ดึงเวลารวมจากข้อความ OCR
             const totalDuration = extractTotalDuration(ocrText);
             console.log('Extracted Total Duration:', totalDuration); // Debug log
-            
+
+
             // อัปเดตสถานะฟอร์ม
             const updates: any = {};
-            
-            if (extractedDate) {
+
+            // เงื่อนไขใหม่: ถ้ามีวันที่หรือรอบที่อยู่แล้วในฟอร์ม จะไม่ autofill ทับ
+            if (extractedDate && (!editForm.date || editForm.date === '')) {
               setDate(extractedDate);
               updates.date = extractedDate;
             }
-            
-            if (sterilizerInfo) {
+
+            if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
               updates.sterilizer = sterilizerInfo;
             }
-            
+
             if (totalDuration) {
               // แปลงรูปแบบเวลาเป็นนาที:วินาที
               const minutes = parseDurationToMinutes(totalDuration);
-              
               // เก็บค่าเป็นนาทีสำหรับทุกโปรแกรม รวมถึง EO
               updates.total_duration = minutes;
             }
+// ฟังก์ชันสุ่มเวลาตามประเภทโปรแกรม
+const getRandomDurationByProgram = (program: string): string => {
+  let min, max;
+  const programUpper = program?.toUpperCase?.() || '';
+  switch(programUpper) {
+    case 'PLASMA':
+      min = 45;
+      max = 75;
+      break;
+    case 'EO':
+      min = 8 * 60;
+      max = 12 * 60;
+      break;
+    case 'BOWIE':
+      min = 20;
+      max = 25;
+      break;
+    case 'PREVAC':
+      min = 45;
+      max = 60;
+      break;
+    default:
+      min = 20;
+      max = 25;
+  }
+  const duration = Math.floor(Math.random() * (max - min + 1)) + min;
+  // For EO, return in minutes
+  return duration.toString();
+};
+            // ถ้า total_duration ยังว่าง ให้สุ่มเวลา
+            if ((!updates.total_duration && !editForm.total_duration) && editForm.program) {
+              updates.total_duration = getRandomDurationByProgram(editForm.program);
+            }
             
+
             // Auto-check test results when a sterile slip image is uploaded
-            // ใช้ค่าจากการตรวจสอบสีที่ได้ทำไปแล้ว
-            
+            // Autofill extracted OCR data only (no color/test result auto-check)
             setEditForm((prev: any) => ({
               ...prev,
-              ...updates,
-              ...testResultsUpdate
+              ...updates
             }));
-            
+
             // สร้างข้อความแจ้งเตือน
             const messageParts = [];
-            
-            if (extractedDate) {
+
+            if (extractedDate && (!editForm.date || editForm.date === '')) {
               messageParts.push(`วันที่: ${extractedDate}`);
             }
-            
-            if (sterilizerInfo) {
+
+            if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
               messageParts.push(`รอบการฆ่าเชื้อ: ${sterilizerInfo}`);
             }
-            
+
             if (totalDuration) {
               if (editForm.program === 'EO') {
                 // แปลงนาทีเป็นชั่วโมงสำหรับโปรแกรม EO
@@ -827,28 +702,21 @@ export default function EditLoadModal({
                 messageParts.push(`เวลารวม: ${totalDuration} นาที`);
               }
             }
-            
+
             // แจ้งเตือนเมื่อพบข้อมูล
-            let alertMessage = `ตั้งค่าวันที่จาก OCR: ${messageParts.join(', ')}`;
-            
-            // เพิ่มข้อความผล BI ถ้ามี
-            if (testResultsUpdate.mechanical) {
-              alertMessage += `\nตรวจพบผลตรวจสอบกลไก: ${testResultsUpdate.mechanical}`;
+            let alertMessage = messageParts.length > 0
+              ? `ตั้งค่าจาก OCR: ${messageParts.join(', ')}`
+              : '';
+
+            if (alertMessage) {
+              Swal.fire({
+                title: 'พบข้อมูลในสลิป',
+                text: alertMessage,
+                icon: 'info',
+                timer: 4000,
+                showConfirmButton: false
+              });
             }
-            if (testResultsUpdate.chemical_external) {
-              alertMessage += `\nตรวจพบผลตรวจสอบเทปเคมีภายนอก: ${testResultsUpdate.chemical_external}`;
-            }
-            if (testResultsUpdate.chemical_internal) {
-              alertMessage += `\nตรวจพบผลตรวจสอบเทปเคมีภายใน: ${testResultsUpdate.chemical_internal}`;
-            }
-            
-            Swal.fire({
-              title: 'พบข้อมูลในสลิป',
-              text: alertMessage,
-              icon: 'success',
-              timer: 4000,
-              showConfirmButton: false
-            });
           } catch (error) {
             console.error('Error processing OCR:', error);
             Swal.fire({
@@ -870,6 +738,11 @@ export default function EditLoadModal({
           return;
         }
       } else {
+        // Auto-tick ผ่าน for bio_test when uploading image 2
+        setEditForm((prev: any) => ({
+          ...prev,
+          bio_test: 'ผ่าน'
+        }));
         // OCR + Claude AI ตรวจสอบ attest เฉพาะช่อง 2
         try {
           startOcrProgress();
@@ -1645,6 +1518,23 @@ export default function EditLoadModal({
                 <option value="EO">EO</option>
                 <option value="BOWIE">BOWIE</option>
               </select>
+              {/* Show selected potNumber below program */}
+              <div className="ml-2 mt-2 flex items-center">
+                <label className="text-black font-medium mr-2" htmlFor="potNumber-select">หม้อที่</label>
+                <select
+                  id="potNumber-select"
+                  name="potNumber"
+                  className="border rounded px-2 py-1 bg-white text-black"
+                  value={editForm.potNumber || ''}
+                  onChange={handleChange}
+                  style={{ minWidth: 60 }}
+                >
+                  <option value="">เลือก</option>
+                  {[...Array(10)].map((_, i) => (
+                    <option key={i+1} value={i+1}>{i+1}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             
             {/* Show sub-programs as text only when BOWIE or PREVAC is selected */}
@@ -2229,6 +2119,46 @@ export default function EditLoadModal({
                 <div className="w-full h-40 flex items-center justify-center text-gray-400">ไม่มีรูป</div>
               )}
               <div className="absolute inset-0" style={{ pointerEvents: 'none' }} />
+            </div>
+            {/* Number selector under Attest: selects numbers 1-10 and updates editForm.which */}
+            <div className="mt-2 w-full">
+              <div className="text-xs text-gray-500 text-center mb-1">เลือกหมายเลข</div>
+              <div className="w-full overflow-x-auto">
+                <div className="flex whitespace-nowrap justify-center gap-2 px-2">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => {
+                  const whichArr: number[] = Array.isArray(editForm?.which) ? [...editForm.which] : [];
+                  const active = whichArr.includes(num);
+                  return (
+                    <div
+                      key={num}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={active}
+                      className={`inline-flex items-center justify-center w-9 h-9 text-sm border rounded-md cursor-pointer select-none transition-colors ${
+                        active ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'
+                      }`}
+                      onClick={() => {
+                        setEditForm((prev: any) => {
+                          const prevWhich = Array.isArray(prev?.which) ? [...prev.which] : [];
+                          const exists = prevWhich.includes(num);
+                          const newWhich = exists ? prevWhich.filter(n => n !== num) : [...prevWhich, num];
+                          return { ...prev, which: newWhich };
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          (e.currentTarget as HTMLDivElement).click();
+                        }
+                      }}
+                      style={{ marginRight: 6 }}
+                    >
+                      <span className="pointer-events-none">{num}</span>
+                    </div>
+                  );
+                })}
+                </div>
+              </div>
             </div>
           </div>
         </form>

@@ -22,6 +22,7 @@ interface SterilizerLoad {
   program?: string;
   attest_sn?: string;
   serial_number?: string;
+  potNumber?: string | number;
   updated_at?: Timestamp | Date | string;
   created_at?: Timestamp | Date | string;
   [key: string]: string | number | boolean | Date | Timestamp | SterilizerItem[] | undefined;
@@ -81,7 +82,7 @@ export default function SterilizerLoadsCompactView({
               <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-1/3">รายการอุปกรณ์</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-24">โปรแกรม</th>
               <th className="py-2 px-3 bg-gray-100 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-32">สถานะ</th>
-              <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-20">SN</th>
+              <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-20">หม้อที่</th>
               <th className="py-2 px-3 bg-gray-100 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-400 w-36">อัพเดทล่าสุด</th>
             </tr>
           </thead>
@@ -113,7 +114,16 @@ export default function SterilizerLoadsCompactView({
                   onClick={() => setEditForm(load)}
                 >
                   <td className="py-2 px-3 text-sm text-gray-800 border-r border-gray-300 whitespace-nowrap"> 
-                    {load.date || '-'}
+                    {(() => {
+                      const dateValue = load.cycleDate || load.date;
+                      if (!dateValue) return '-';
+                      if (typeof dateValue === 'string') return dateValue;
+                      if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0];
+                      if (dateValue && typeof dateValue === 'object' && 'toDate' in dateValue) {
+                        return dateValue.toDate().toISOString().split('T')[0];
+                      }
+                      return '-';
+                    })()}
                   </td>
                   <td className="py-2 px-3 text-sm text-gray-800 border-r border-gray-300 text-center"> 
                     {load.sterilizer || '-'}
@@ -168,7 +178,7 @@ export default function SterilizerLoadsCompactView({
                     </div>
                   </td>
                   <td className="py-2 px-3 text-center text-sm text-gray-800 border-r border-gray-300">
-                    {load.attest_sn || load.serial_number || '-'}
+                    {load.potNumber || '-'}
                   </td>
                   <td className="py-2 px-3 text-center text-sm text-gray-700 border-r border-gray-300 whitespace-nowrap">
                     {(() => {

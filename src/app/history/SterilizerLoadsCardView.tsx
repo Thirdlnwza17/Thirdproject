@@ -37,7 +37,7 @@ interface SterilizerLoad {
 }
 
 interface StatusType {
-  status: 'None' | 'Pass' | 'Fail' | 'Test Run';
+  status: 'Waiting' | 'Pass' | 'Fail' | 'Test Run';
   color: string;
 }
 
@@ -61,9 +61,9 @@ export const getStatuses = (load: SterilizerLoad): StatusType[] => {
     load.chemical_internal === 'ไม่ผ่าน' || 
     load.bio_test === 'ไม่ผ่าน';
   
-  // If no test results are selected, return None status
+  // If no test results are selected, return Waiting status
   if (!hasTestResults) {
-    return [{ status: 'None' as const, color: 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200' }];
+    return [{ status: 'Waiting' as const, color: 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200' }];
   }
   
   // Return statuses based on conditions
