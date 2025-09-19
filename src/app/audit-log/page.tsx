@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getAuditLogs, subscribeToAuditLogs, AuditLogEntry, fetchAllUsers } from '@/dbService';
@@ -9,11 +8,6 @@ import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 
-interface UserData {
-  fullName: string;
-  email?: string;
-  role: string;
-}
 
 interface ChangeItem {
   action: string;
@@ -41,8 +35,6 @@ interface AuditLogDetails {
   _changes?: ChangeItem[];
 }
 
-
-// Component for collapsible content
 interface CollapsibleContentProps {
   content: string;
   maxLength?: number;
@@ -427,7 +419,7 @@ export default function AuditLogPage() {
                 return format((value as { toDate: () => Date }).toDate(), 'yyyy/MM/dd', { locale: th });
               }
               return format(new Date(String(value)), 'yyyy/MM/dd', { locale: th });
-            } catch (_) {
+            } catch {
               return 'ไม่ระบุ';
             }
           };

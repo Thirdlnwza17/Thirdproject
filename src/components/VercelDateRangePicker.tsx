@@ -7,7 +7,6 @@ import {
   startOfWeek, 
   startOfMonth, 
   startOfYear, 
-  isSameDay, 
   addMonths, 
   subMonths, 
   isSameMonth, 
@@ -16,13 +15,9 @@ import {
   endOfMonth, 
   startOfDay, 
   endOfDay,
-  isBefore,
-  isAfter,
   isToday,
   getDay,
   addDays,
-  subWeeks,
-  addWeeks,
   addYears,
   subYears
 } from 'date-fns';
@@ -91,8 +86,6 @@ export function VercelDateRangePicker({
   }, [initialRange]);
   
   const days = getMonthDays(currentMonth);
-  const nextMonth = addMonths(currentMonth, 1);
-  const prevMonth = subMonths(currentMonth, 1);
 
   const presets: Preset[] = [
     {
@@ -181,38 +174,6 @@ export function VercelDateRangePicker({
       return '';
     } catch {
       return '';
-    }
-  };
-
-  // Handle date input change with custom format
-  const handleDateInputChange = (type: 'start' | 'end', value: string) => {
-    // Allow only numbers and slashes
-    const cleaned = value.replace(/[^0-9/]/g, '');
-    
-    // Auto-format as user types (YYYY/MM/DD)
-    let formatted = '';
-    for (let i = 0; i < cleaned.length; i++) {
-      if (i === 4 || i === 6) {
-        formatted += '/';
-      }
-      if (i < 8) { // Only allow YYYY/MM/DD (8 digits + 2 slashes = 10 chars)
-        formatted += cleaned[i];
-      }
-    }
-    
-    // Update the visible input value
-    if (type === 'start') {
-      setRange(prev => ({
-        ...prev,
-        startDate: formatted.length === 10 ? parseInputDate(formatted) : ''
-      }));
-    } else {
-      setTempEndDate(formatted.length === 10 ? parseInputDate(formatted) : '');
-      if (formatted.length === 10) {
-        handleDateChange('end', parseInputDate(formatted));
-      } else {
-        setRange(prev => ({ ...prev, endDate: '' }));
-      }
     }
   };
 

@@ -235,8 +235,7 @@ export default function LoginPage() {
     
     setLoading(true);
     try {
-      // Use the full email for login
-      const { role, user } = await loginUser(selectedUser.email, password, selectedUser);
+      const { role } = await loginUser(selectedUser.email, password, selectedUser);
       
       setSuccess("เข้าสู่ระบบสำเร็จ!");
       

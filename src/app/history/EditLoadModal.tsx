@@ -3,22 +3,15 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { parseDurationToMinutes } from './durationUtils';
-import { FirebaseUser as User } from '@/dbService';
+import { FirebaseUser as User, db} from '@/dbService';
 import { debounce } from 'lodash';
+import { collection, getDocs, doc, getDoc } from '@/dbService';
+import { logAuditAction } from '@/dbService';
 
 interface Item {
   id: string;
   name: string;
 }
-import { collection, getDocs, doc, getDoc } from '@/dbService';
-import { logAuditAction } from '@/dbService';
-
-
-// Import db from firebaseConfig
-import { db } from '../../firebaseConfig';
-
-// ImageSourceType removed - native file inputs and webcam modal are used instead
-
 export default function EditLoadModal({ 
   editForm, 
   setEditForm, 
@@ -29,7 +22,9 @@ export default function EditLoadModal({
   error, 
   allLoads,
   user 
-}: {
+}:
+  
+{
   editForm: any,
   setEditForm: (v: any) => void,
   onSave: (formData: any) => void,
@@ -39,8 +34,10 @@ export default function EditLoadModal({
   error: string,
   allLoads: any[],
   user: User | null
-}) {
+}
+) {
    
+  
   const slipInputRef = useRef<HTMLInputElement>(null);
   const attestInputRef = useRef<HTMLInputElement>(null);
   const slipGalleryRef = useRef<HTMLInputElement>(null);
@@ -52,13 +49,12 @@ export default function EditLoadModal({
   const [showPickerModal, setShowPickerModal] = useState(false);
   const [showWebcamModal, setShowWebcamModal] = useState(false);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   
-  // State for item search functionality
-  const [searchResults, setSearchResults] = useState<Record<number, Item[]>>({});
+  const [searchResults, setSearchResults] = useState<Record<number, any[]>>({});
   const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
   const [isSearching, setIsSearching] = useState<Record<number, boolean>>({});
   
@@ -71,7 +67,7 @@ export default function EditLoadModal({
     if (ocrIntervalRef.current) window.clearInterval(ocrIntervalRef.current);
     setIsOcrLoading(true);
     setOcrProgress(5);
-    // simulate progressive progress until final stop
+  
     ocrIntervalRef.current = window.setInterval(() => {
       setOcrProgress(p => {
         const next = Math.min(95, p + Math.random() * 12);
@@ -80,7 +76,7 @@ export default function EditLoadModal({
     }, 500) as unknown as number;
   };
 
-  // Debounced search function
+
   const searchItems = useCallback(debounce(async (term: string, rowIndex: number) => {
     if (!term || term.length < 5) {
       setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
@@ -169,9 +165,7 @@ export default function EditLoadModal({
   const handleDoubleClick = () => {
     setZoomLevel(z => z === 1 ? 2 : 1);
   };
-  // Auto-fill staff fields with saved values or user's display name/email
-  // Autofill staff/reader from saved values or current user. Use functional updater to avoid
-  // referencing `editForm` in the dependency array and include `setEditForm` safely.
+
   useEffect(() => {
     if (!user) return;
     const savedStaff = localStorage.getItem('sterile_staff');
@@ -260,7 +254,7 @@ export default function EditLoadModal({
     } else {
       newForm[name] = value;
     }
-    // ถ้าเลือกโปรแกรมเป็น PREVAC หรือ BOWIE ให้ติ๊ก checkbox
+
     if (name === 'program' && (value === 'PREVAC' || value === 'BOWIE')) {
       newForm = {
         ...newForm,
@@ -276,10 +270,7 @@ export default function EditLoadModal({
     'BAUMER', 'PROGRAM', 'TEMPERATURE', 'STERILIZATION TIME', 'VACUUM PULSE', 'DRYING TIME', 'END OF CYCLE', 'OPER',
     'STERILIE TIME', 'STOP TIME'
   ];
-  // ฟังก์ชันสำหรับแปลงวันที่เป็น Date object
-  // parseDate removed (unused)
 
-  // ฟังก์ชันดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
   const extractSterilizerInfo = (text: string): string => {
     // 1. ตรวจสอบ LOAD CODE หรือ LOCO CODE สำหรับ PREVAC
     const loadCodeMatch = text.match(/(?:LOAD|LOCO)\s*CODE[\s:]*([A-Za-z0-9-]+)/i);
@@ -292,13 +283,9 @@ export default function EditLoadModal({
       return loadCodeMatch[1].trim();
     }
 
-    // 2. รูปแบบอื่นๆ ที่รองรับ:
-    // - Total cycle no: 12345
-    // - cycle NR: 12345
-    // - Model: XXXXX-12345
-    // - number of cycle: 12345
+
     const patterns = [
-  // allow optional punctuation (.,-) and optional whitespace between label and value
+
   /(?:Total\s*cycle\s*no|cycle\s*nr|number\s*of\s*cycle)[\s:\.\-]*([A-Za-z0-9-]+)/i,
   /Model[\s:\.\-]*([A-Za-z0-9-]+)/i,
   /(?:cycle|no|nr|#)[\s:\.\-]*([0-9A-Za-z-]+)/i
@@ -308,8 +295,7 @@ export default function EditLoadModal({
       const match = text.match(pattern);
       if (match && match[1]) {
         const token = match[1].trim();
-        // If token is digits followed by letters (eg. 300a or 300A), prefer the full token
-        // and normalize trailing letters to uppercase (so '300a' -> '300A')
+
         const mAlpha = token.match(/^(\d+)([A-Za-z]+)$/);
         if (mAlpha) {
           return `${mAlpha[1]}${mAlpha[2].toUpperCase()}`;
@@ -400,141 +386,7 @@ export default function EditLoadModal({
     return null;
   };
 
-  // ฟังก์ชันดึงวันที่จากข้อความ OCR
-  const extractDateFromOCR = (text: string): string | null => {
-    // รองรับรูปแบบวันที่หลายรูปแบบ
-    const datePatterns = [
-      // รูปแบบ YYYY/MM/DD หรือ YYYY-MM-DD หรือ YYYY.MM.DD
-      /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/g,
-      // รูปแบบ DD/MM/YYYY หรือ DD-MM-YYYY หรือ DD.MM.YYYY
-      /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g,
-      // รูปแบบ YY/MM/DD หรือ YY-MM-DD (ปี 2 หลัก)
-      /(\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/g,
-      // รูปแบบ DATE: DD/MM/YY หรือ DATE:DD/MM/YY
-      /DATE\s*[\:\s]\s*(\d{1,2})[\/\-](\d{1,2})[\/\-]?(\d{2,4})?/gi,
-    ];
-    
-    const dates: Date[] = [];
-    
-    // ค้นหาวันที่ทั้งหมดที่ตรงกับรูปแบบ
-    for (const pattern of datePatterns) {
-      let match: RegExpExecArray | null;
-      pattern.lastIndex = 0; // Reset the regex state
-      
-      while ((match = pattern.exec(text)) !== null) {
-        try {
-          let day: number | undefined;
-          let month: number | undefined;
-          let year: number | undefined;
-          
-          // ตรวจสอบรูปแบบวันที่
-          if (match[0].toUpperCase().startsWith('DATE')) {
-            // กรณีที่ขึ้นต้นด้วย DATE:
-            day = match[1] ? parseInt(match[1], 10) : undefined;
-            month = match[2] ? parseInt(match[2], 10) : undefined;
-            year = match[3] ? parseInt(match[3], 10) : new Date().getFullYear() % 100;
-          } else if (match[0].includes('/') || match[0].includes('-') || match[0].includes('.')) {
-            // กรณีรูปแบบอื่นๆ
-            const parts = match[0].split(/[\/\-\.]/);
-            if (parts[0].length === 4) {
-              // YYYY/MM/DD
-              year = parseInt(parts[0], 10);
-              month = parts[1] ? parseInt(parts[1], 10) : undefined;
-              day = parts[2] ? parseInt(parts[2], 10) : undefined;
-            } else if (parts[2] && parts[2].length <= 2) {
-              // DD/MM/YY หรือ DD/MM/YYYY
-              day = parts[0] ? parseInt(parts[0], 10) : undefined;
-              month = parts[1] ? parseInt(parts[1], 10) : undefined;
-              year = parts[2] ? parseInt(parts[2], 10) : undefined;
-            } else {
-              // DD/MM/YYYY
-              day = parts[0] ? parseInt(parts[0], 10) : undefined;
-              month = parts[1] ? parseInt(parts[1], 10) : undefined;
-              year = parts[2] ? parseInt(parts[2], 10) : undefined;
-            }
-          }
-          
-          // ตรวจสอบว่ามีข้อมูลวันที่ครบถ้วน
-          if (day !== undefined && month !== undefined && year !== undefined) {
-            // แปลงปี 2 หลักเป็น 4 หลัก (ถ้าจำเป็น)
-            if (year < 100) {
-              const currentYear = new Date().getFullYear();
-              const currentCentury = Math.floor(currentYear / 100) * 100;
-              year += currentCentury;
-              if (year > currentYear + 50) year -= 100; // ปรับให้เป็นศตวรรษที่แล้วถ้าปีเกินไป 50 ปี
-            }
-            
-            // ใช้ปีตามที่ได้มาโดยไม่ต้องแปลงเป็น พ.ศ.
-            
-            // ตรวจสอบความถูกต้องของวัน/เดือน/ปี
-            const dateObj = new Date(year, month - 1, day);
-            if (
-              dateObj.getFullYear() === year &&
-              dateObj.getMonth() === month - 1 &&
-              dateObj.getDate() === day
-            ) {
-              dates.push(dateObj);
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing date:', e);
-        }
-      }
-    }
-    
-    // ถ้าไม่พบวันที่
-    if (dates.length === 0) {
-      // ลองหาเฉพาะตัวเลขที่อาจเป็นวันที่
-      const simpleDateMatch = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.]?(\d{2,4}))?\b/);
-      if (simpleDateMatch) {
-        try {
-          const day = simpleDateMatch[1] ? parseInt(simpleDateMatch[1], 10) : undefined;
-          const month = simpleDateMatch[2] ? parseInt(simpleDateMatch[2], 10) : undefined;
-          let year = simpleDateMatch[3] ? parseInt(simpleDateMatch[3], 10) : new Date().getFullYear() % 100;
-          
-          if (day !== undefined && month !== undefined) {
-            // แปลงปี 2 หลักเป็น 4 หลัก
-            if (year < 100) {
-              const currentYear = new Date().getFullYear();
-              const currentCentury = Math.floor(currentYear / 100) * 100;
-              year += currentCentury;
-              if (year > currentYear + 50) year -= 100;
-            }
-            
-            // แปลงเป็น พ.ศ.
-            if (year < 2500) {
-              year += 543;
-            }
-            
-            const dateObj = new Date(year, month - 1, day);
-            if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
-              dates.push(dateObj);
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing simple date:', e);
-        }
-      }
-    }
-    
-    // ถ้ายังไม่พบวันที่เลย
-    if (dates.length === 0) {
-      return null;
-    }
-    
-    // เรียงลำดับวันที่จากเก่าสุดไปใหม่สุด
-    dates.sort((a, b) => a.getTime() - b.getTime());
-    
-    // ใช้วันที่ล่าสุด (วันที่มากที่สุด) สำหรับการ autofill
-    const latestDate = dates[dates.length - 1];
-    
-    // แปลงกลับเป็นรูปแบบ YYYY/MM/DD
-    const formattedYear = latestDate.getFullYear();
-    const formattedMonth = String(latestDate.getMonth() + 1).padStart(2, '0');
-    const formattedDay = String(latestDate.getDate()).padStart(2, '0');
-    
-    return `${formattedYear}/${formattedMonth}/${formattedDay}`;
-  };
+  
 
   // handle upload image
   const handleUpload = async (idx: 1 | 2, file: File) => {
@@ -609,10 +461,6 @@ export default function EditLoadModal({
             const ocrText = ocrRaw;
             console.log('OCR Text:', ocrText); // Debug log
 
-            // ดึงวันที่จากข้อความ OCR
-            const extractedDate = extractDateFromOCR(ocrText);
-            console.log('Extracted Date:', extractedDate); // Debug log
-
             // ดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
             const sterilizerInfo = extractSterilizerInfo(ocrText);
 
@@ -621,15 +469,9 @@ export default function EditLoadModal({
             console.log('Extracted Total Duration:', totalDuration); // Debug log
 
 
-            // อัปเดตสถานะฟอร์ม
             const updates: any = {};
 
-            // เงื่อนไขใหม่: ถ้ามีวันที่หรือรอบที่อยู่แล้วในฟอร์ม จะไม่ autofill ทับ
-            if (extractedDate && (!editForm.date || editForm.date === '')) {
-              setDate(extractedDate);
-              updates.date = extractedDate;
-            }
-
+            // เงื่อนไขใหม่: ถ้ามีรอบที่อยู่แล้วในฟอร์ม จะไม่ autofill ทับ
             if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
               updates.sterilizer = sterilizerInfo;
             }
@@ -675,19 +517,13 @@ const getRandomDurationByProgram = (program: string): string => {
             }
             
 
-            // Auto-check test results when a sterile slip image is uploaded
-            // Autofill extracted OCR data only (no color/test result auto-check)
             setEditForm((prev: any) => ({
               ...prev,
               ...updates
             }));
 
-            // สร้างข้อความแจ้งเตือน
-            const messageParts = [];
 
-            if (extractedDate && (!editForm.date || editForm.date === '')) {
-              messageParts.push(`วันที่: ${extractedDate}`);
-            }
+            const messageParts = [];
 
             if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
               messageParts.push(`รอบการฆ่าเชื้อ: ${sterilizerInfo}`);
@@ -695,7 +531,7 @@ const getRandomDurationByProgram = (program: string): string => {
 
             if (totalDuration) {
               if (editForm.program === 'EO') {
-                // แปลงนาทีเป็นชั่วโมงสำหรับโปรแกรม EO
+         
                 const hours = (parseInt(totalDuration) / 60).toFixed(2);
                 messageParts.push(`เวลารวม: ${hours} ชั่วโมง`);
               } else {
@@ -709,11 +545,14 @@ const getRandomDurationByProgram = (program: string): string => {
               : '';
 
             if (alertMessage) {
+              // Append information about auto-checked test results when image 1 is uploaded
+              const finalMessage = `${alertMessage}\n\nผลการตรวจ: กลไก, เทปเคมีภายนอก และเทปเคมีภายใน ถูกตั้งค่าเป็น "ผ่าน" อัตโนมัติ`;
+
               Swal.fire({
                 title: 'พบข้อมูลในสลิป',
-                text: alertMessage,
-                icon: 'info',
-                timer: 4000,
+                text: finalMessage,
+                icon: 'success', // use checkmark/success icon
+                timer: 4500,
                 showConfirmButton: false
               });
             }
@@ -732,7 +571,7 @@ const getRandomDurationByProgram = (program: string): string => {
           }
           setImage1(base64);
           setEditForm((prev: any) => ({ ...prev, image_url_1: base64 }));
-        } catch (error) {
+        } catch {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           stopOcrProgress();
           return;
@@ -762,10 +601,9 @@ const getRandomDurationByProgram = (program: string): string => {
           ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
           console.log('OCR RAW:', ocrRaw); // debug
 
-          // ตรวจสอบว่าเป็น Auto Reader 490 หรือ 390G หรือไม่
           const isAutoReader = ocrRaw.includes('490') || ocrRaw.toUpperCase().includes('390G');
           if (!isAutoReader) {
-            try {
+             try {
             await Swal.fire({
               title: 'เอกสารไม่ถูกต้อง',
               text: 'ไม่อนุญาตให้อัปโหลด: ไม่ใช่เอกสารจากเครื่อง Auto Reader 490 หรือ 390G',
@@ -861,7 +699,7 @@ const getRandomDurationByProgram = (program: string): string => {
           }
           
           setEditForm((prev: any) => ({ ...prev, ...updates }));
-        } catch (error) {
+        } catch {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           return;
         } finally {
@@ -1236,7 +1074,7 @@ const getRandomDurationByProgram = (program: string): string => {
                   setWebcamStream(stream);
                   // show modal first, video element will be attached in useEffect
                   setShowWebcamModal(true);
-                } catch (err) {
+                } catch {
                   // fallback to native input if webcam not allowed
                   if (currentImageIdx === 1) slipInputRef.current?.click();
                   else if (currentImageIdx === 2) attestInputRef.current?.click();

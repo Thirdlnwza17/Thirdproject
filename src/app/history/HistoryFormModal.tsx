@@ -70,7 +70,6 @@ export default function HistoryFormModal({
   user 
 }: FormModalProps) {
   const [rowCount, setRowCount] = useState(1);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [searchResults, setSearchResults] = useState<Record<number, Item[]>>({});
   const [searchTerm, setSearchTerm] = useState<Record<number, string>>({});
   const [isSearching, setIsSearching] = useState<Record<number, boolean>>({});
@@ -312,6 +311,27 @@ export default function HistoryFormModal({
     }
   }, [form.sterile_staff, form.result_reader]);
 
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, ''); // Remove all non-digits
+    
+    // Auto-format the date as YYYY/MM/DD
+    if (value.length > 4) {
+      value = value.substring(0, 4) + '/' + value.substring(4);
+    }
+    if (value.length > 7) {
+      value = value.substring(0, 7) + '/' + value.substring(7, 9);
+    }
+    
+    // Update the form state
+    setForm(prev => ({
+      ...prev,
+      [e.target.name]: value
+    }));
+    
+    // Clear error when user starts typing
+    if (dateError) setDateError('');
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
@@ -415,13 +435,38 @@ export default function HistoryFormModal({
                     type="text" 
                     className={`border rounded px-2 py-1 w-full ${dateError ? 'border-red-500' : 'border-gray-300'}`} 
                     value={form.cycleDate || ''} 
-                    onChange={(e) => {
-                      handleChange(e);
-                      // Clear error when user starts typing
-                      if (dateError) setDateError('');
+                    onChange={handleDateChange}
+                    onKeyDown={(e) => {
+                      // Prevent typing more than 10 characters (YYYY/MM/DD)
+                      if (e.currentTarget.value.length >= 10 && e.key !== 'Backspace' && e.key !== 'Delete' && !e.ctrlKey) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => {
+                      // Handle paste event to clean up the pasted text
+                      e.preventDefault();
+                      const pastedText = e.clipboardData.getData('text/plain').replace(/\D/g, '');
+                      if (pastedText) {
+                        const formattedDate = pastedText.substring(0, 8);
+                        let displayValue = '';
+                        if (formattedDate.length > 0) {
+                          displayValue = formattedDate.substring(0, 4);
+                          if (formattedDate.length > 4) {
+                            displayValue += '/' + formattedDate.substring(4, 6);
+                            if (formattedDate.length > 6) {
+                              displayValue += '/' + formattedDate.substring(6, 8);
+                            }
+                          }
+                        }
+                        setForm(prev => ({
+                          ...prev,
+                          cycleDate: displayValue
+                        }));
+                      }
                     }}
                     onBlur={() => form.cycleDate && validateDate(form.cycleDate)}
                     placeholder="YYYY/MM/DD"
+                    maxLength={10}
                     required
                   />
                 </label>
@@ -519,8 +564,7 @@ export default function HistoryFormModal({
                             onKeyDown={(e) => handleKeyDown(e, i, 'name')}
                             onInput={(e) => handleInput(e, i, 'name')}
                             onFocus={() => handleInputFocus(i)}
-placeholder="พิมพ์อย่างน้อย 5 ตัวอักษร"
-                            required
+                            placeholder="พิมพ์อย่างน้อย 5 ตัวอักษร"
                             autoComplete="off"
                             autoCorrect="off"
                             autoCapitalize="off"

@@ -39,7 +39,6 @@ interface SterilizerLoadsCompactViewProps {
 
 export default function SterilizerLoadsCompactView({ 
   loads, 
-  onViewDetail, 
   user, 
   onEditSave, 
   onDelete, 
@@ -104,7 +103,6 @@ export default function SterilizerLoadsCompactView({
             ) : (
               loads.map((load) => {
               const statuses = getStatuses(load);
-              const mainStatus = statuses[statuses.length - 1]; // Get the most important status
               const items = load.items || []; // Ensure items is always an array
               
               return (
@@ -166,15 +164,47 @@ export default function SterilizerLoadsCompactView({
                     {load.program || '-'}
                   </td>
                   <td className="py-2 px-3 border-r border-gray-300"> 
-                    <div className="flex flex-wrap gap-1">
-                      {statuses.map((status, idx) => (
-                        <span 
-                          key={idx}
-                          className={`${status.color} text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors`}
-                        >
-                          {status.status}
-                        </span>
-                      ))}
+                    <div className="flex items-center flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1">
+                        {statuses.map((status, idx) => (
+                          <span 
+                            key={idx}
+                            className={`${status.color} text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors`}
+                          >
+                            {status.status}
+                          </span>
+                        ))}
+                      </div>
+                      {/* Separate eye badge when reader and sterile_staff differ */}
+                      {(() => {
+                        const reader = (load.result_reader || '').toString().trim();
+                        const sterile = (load.sterile_staff || '').toString().trim();
+                        const showEye = reader && sterile && reader !== sterile;
+                        if (!showEye) return null;
+                        return (
+                          <span className="bg-white text-[10px] px-1.5 py-0.5 rounded font-medium border border-gray-200 text-gray-700 ml-1 inline-flex items-center" title={`Reader: ${reader} • Sterile: ${sterile}`}>
+                            {/* Inline SVG double-eyes - compact cartoon style */}
+                            <svg width="28" height="14" viewBox="0 0 34 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                              {/* left eye outer */}
+                              <ellipse cx="9" cy="9" rx="7.5" ry="8" fill="#F9FAFB" stroke="#E6EEF3" strokeWidth="1"/>
+                              {/* right eye outer */}
+                              <ellipse cx="25" cy="9" rx="7.5" ry="8" fill="#F9FAFB" stroke="#E6EEF3" strokeWidth="1"/>
+                              {/* left iris */}
+                              <circle cx="9" cy="9" r="4.2" fill="#6B7280" />
+                              {/* left pupil */}
+                              <circle cx="9" cy="9" r="2.2" fill="#111827" />
+                              {/* left highlight */}
+                              <circle cx="11.2" cy="6.6" r="1.4" fill="#FFFFFF" opacity="0.9" />
+                              {/* right iris */}
+                              <circle cx="25" cy="9" r="4.2" fill="#6B7280" />
+                              {/* right pupil */}
+                              <circle cx="25" cy="9" r="2.2" fill="#111827" />
+                              {/* right highlight */}
+                              <circle cx="27.2" cy="6.6" r="1.4" fill="#FFFFFF" opacity="0.9" />
+                            </svg>
+                          </span>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="py-2 px-3 text-center text-sm text-gray-800 border-r border-gray-300">

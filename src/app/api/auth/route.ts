@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, getUserRole } from '@/dbService';
 
-// Types
+
 interface UserResponse {
   email: string | null;
   displayName: string | null;
@@ -13,11 +13,10 @@ interface ErrorResponse {
   details?: string;
 }
 
-// Cache for user roles (in-memory, consider Redis for production)
 const roleCache = new Map<string, string>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000; 
 
-// Security headers configuration
+
 const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -26,14 +25,14 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
-// Cache control headers
+
 const cacheControl = {
   'Cache-Control': 'private, no-cache, no-store, must-revalidate',
   'Pragma': 'no-cache',
   'Expires': '0',
 };
 
-// Helper function to create consistent responses
+
 const createResponse = <T = unknown>(
   data: T, 
   status: number = 200, 
@@ -52,7 +51,7 @@ const createResponse = <T = unknown>(
 
 export async function GET(request: NextRequest) {
   try {
-    // Check for API key in headers (if needed)
+ 
     const apiKey = request.headers.get('x-api-key');
     if (process.env.REQUIRE_API_KEY && apiKey !== process.env.API_KEY) {
       return createResponse(

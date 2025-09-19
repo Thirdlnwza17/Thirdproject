@@ -8,11 +8,7 @@ import { VercelDateRangePicker } from "@/components/VercelDateRangePicker";
 import { 
   getUserRole, 
   subscribeToSterilizerLoads, 
-  logAuditAction,
-  deleteLog as deleteLogService,
-  updateLog as updateLogService,
   signOutUser,
-  firebaseSignOut,
   firebaseAuthStateChanged as onAuthStateChanged,
   FirebaseUser as User,
   auth
@@ -20,30 +16,10 @@ import {
 
 import { MAIN_PROGRAMS, AUTOCLAVE_SUBPROGRAMS } from "./constants";
 import ProgramAnalyticsChart, { ProgramAnalyticsData } from "./ProgramAnalyticsChart";
-import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry, ProgramAnalytics } from "./analyticsService";
+import { calculateProgramAnalytics, SterilizerEntry as AnalyticsSterilizerEntry } from "./analyticsService";
 import BubbleBackground from "@/components/BubbleBackground";
 
-// Dashboard Card Component
-const DashboardCard = ({ 
-  title, 
-  children, 
-  className = '' 
-}: { 
-  title?: string; 
-  children: React.ReactNode; 
-  className?: string; 
-}) => (
-  <div className={`bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden ${className}`}>
-    {title && (
-      <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-100">
-        <h3 className="text-xl font-bold text-blue-900">{title}</h3>
-      </div>
-    )}
-    <div className="p-6">
-      {children}
-    </div>
-  </div>
-);
+
 
 
 const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: string, onLogout: () => void }) => {
@@ -245,9 +221,7 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string>("");
   const router = useRouter();
   const unsubEntriesRef = useRef<null | (() => void)>(null);
-  const [entriesPerPage] = useState(10);
   const [selectedProgram] = useState<string>("ALL");
-  const [selectedIndicators] = useState<(keyof CheckboxResults)[]>([]);
   const [isProgramDetailsExpanded, setIsProgramDetailsExpanded] = useState(true);
   const [dateRange, setDateRange] = useState({
     startDate: '',
@@ -257,14 +231,6 @@ export default function DashboardPage() {
   const handleDateRangeChange = useCallback((range: { startDate: string; endDate: string }) => {
     setDateRange(range);
   }, []);
-
-  const formatToYyMmDd = (iso: string) => {
-    if (!iso) return '';
-    const parts = iso.split('-');
-    if (parts.length !== 3) return iso;
-    const [yyyy, mm, dd] = parts;
-    return `${yyyy}/${mm}/${dd}`;
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -355,17 +321,6 @@ export default function DashboardPage() {
       router.replace('/history');
     }
   }, [role, loading, router]);
-
-  // คำนวณข้อมูล 1 เดือนล่าสุด
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  
-  const recentEntries = entries.filter(entry => {
-    if (entry.created_at && entry.created_at.toDate) {
-      return entry.created_at.toDate() >= oneMonthAgo;
-    }
-    return false;
-  });
 
   // Pagination removed as it wasn't being used in the UI
 

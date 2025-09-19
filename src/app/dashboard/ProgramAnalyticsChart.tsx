@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Bar, Pie } from "react-chartjs-2";
-import { TooltipItem, ScriptableContext, Chart } from 'chart.js';
+import { TooltipItem, ScriptableContext } from 'chart.js';
 import {
   Chart as ChartJS,
   CategoryScale,

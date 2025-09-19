@@ -11,16 +11,16 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  FirebaseUser,
   getDocs, 
   getDoc, 
-  Timestamp 
+  db
 } from '@/dbService';
-import { db } from '@/firebaseConfig';
+
 import EditLoadModal from './EditLoadModal';
 import SterilizerLoadsCompactView from './SterilizerLoadsCompactView';
 import { VercelDateRangePicker } from '@/components/VercelDateRangePicker';
 
-// Type definitions
 interface SterilizerItem {
   name: string;
   quantity?: string | number;
@@ -36,14 +36,20 @@ interface SterilizerLoad {
   [key: string]: unknown;
 }
 
+interface Load {
+  sterile_staff?: string;
+  result_reader?: string;
+  
+}
+
 interface StatusType {
   status: 'Waiting' | 'Pass' | 'Fail' | 'Test Run';
   color: string;
 }
 
-// Helper function to determine statuses
+
 export const getStatuses = (load: SterilizerLoad): StatusType[] => {
-  // Check if it's a test run (no items or all quantities are 0/empty)
+  
   const isTestRun = !load.items || 
                    load.items.length === 0 || 
                    load.items.every((item: SterilizerItem) => !item.quantity || item.quantity === '0' || item.quantity === 0);
@@ -92,8 +98,6 @@ interface SterilizerLoadsCardViewProps {
   role?: string;
 }
 
-// Helper to ensure ISO date strings (YYYY-MM-DD)
-const ensureIso = (v: string) => v ? v.slice(0,10) : '';
 
 export default function SterilizerLoadsCardView({ 
   user, 
@@ -103,27 +107,17 @@ export default function SterilizerLoadsCardView({
   endDate,
   role = 'operator' // Default to operator if not provided
 }: SterilizerLoadsCardViewProps) {
-  // Date range state
+  
   const [dateRange, setDateRange] = useState({
     startDate: startDate,
     endDate: endDate
   });
   
-  // Handle date range change from the Vercel date picker
   const handleDateRangeChange = (newRange: { startDate: string; endDate: string }) => {
     setDateRange(newRange);
     if (onDateRangeChange) {
       onDateRangeChange(newRange);
     }
-  };
-  
-  // Format ISO (YYYY-MM-DD) to yyyy/mm/dd for display
-  const formatToYyMmDd = (iso: string) => {
-    if (!iso) return '';
-    const parts = iso.split('-');
-    if (parts.length !== 3) return iso;
-    const [yyyy, mm, dd] = parts;
-    return `${yyyy}/${mm}/${dd}`;
   };
   
   const handleClearAllFilters = () => {
@@ -159,7 +153,6 @@ export default function SterilizerLoadsCardView({
   const itemsPerPage = viewMode === 'compact' ? 15 : 6;
   const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
   const cardRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
-  // State for edit modal
   const [editForm, setEditForm] = useState<any | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -179,7 +172,7 @@ export default function SterilizerLoadsCardView({
   const [chemicalInternalFilter, setChemicalInternalFilter] = useState("");
   const [bioTestFilter, setBioTestFilter] = useState("");
 
-  // Fetch staff list using dbService
+ 
   useEffect(() => {
     const fetchStaff = async () => {
       try {
@@ -278,7 +271,7 @@ export default function SterilizerLoadsCardView({
   }, [clearAllFiltersTrigger]);
   
   // Filter loads by staff (both sterile staff and result readers)
-  const filterByStaff = (load: any) => {
+  const filterByStaff = (load: Load) => {
     if (!selectedStaff) return true;
     
     const staffName = selectedStaff.toLowerCase();
@@ -345,7 +338,6 @@ export default function SterilizerLoadsCardView({
       }
     }
     
-    // SN Filter (ใช้ attest_sn)
     if (snFilter && load.attest_sn !== snFilter) return false;
     // กรองประเภท
     if (filter !== 'All') {
@@ -372,10 +364,9 @@ export default function SterilizerLoadsCardView({
     // Search functionality
     if (searchText && searchText.trim()) {
       const lower = searchText.trim().toLowerCase();
-      
-      // If we have search results, match by equipment ID or name
+  
       if (equipmentSearchResults.length > 0) {
-        const hasMatchingEquipment = load.items?.some((item: any) => {
+        const hasMatchingEquipment = load.items?.some((item: SterilizerItem) => {
           const itemId = typeof item === 'object' ? item.id : item;
           const itemName = typeof item === 'object' ? item.name : '';
           
@@ -396,7 +387,7 @@ export default function SterilizerLoadsCardView({
         
         // Search in equipment names from items array
         const items = Array.isArray(load.items)
-          ? load.items.map((item: any) => (typeof item === 'string' ? item : (item.name || ''))).join(' ').toLowerCase()
+          ? load.items.map((item: SterilizerItem) => (typeof item === 'string' ? item : (item.name || ''))).join(' ').toLowerCase()
           : (typeof load.items === 'string' ? load.items.toLowerCase() : '');
         
         // Search in sterilizer field (cycle number)
@@ -422,15 +413,10 @@ export default function SterilizerLoadsCardView({
     currentPage * itemsPerPage
   );
   
-  // Update page when view mode changes
   useEffect(() => {
     setCurrentPage(1);
   }, [viewMode]);
 
-  // ฟังก์ชัน modal edit, modal image, zoom, drag (เหมือนเดิม)
-  // ... (handleEdit, handleEditSave, handleDelete, modal image, zoom, drag, etc.)
-
-  // ฟังก์ชัน handleEditSave (logic อัปเดตข้อมูล)
   const handleEditSave = async (formData: any) => {
     setEditLoading(true);
     setEditError("");
@@ -465,13 +451,17 @@ export default function SterilizerLoadsCardView({
         setCurrentPage(page);
       }
       
-      setLoading(false);
-    } catch (err: any) {
-      setEditError(err.message || "เกิดข้อผิดพลาด");
-    } finally {
-      setEditLoading(false);
-    }
-  };
+       setLoading(false);
+} catch (err: unknown) {
+  if (err instanceof Error) {
+    setEditError(err.message);
+  } else {
+    setEditError("เกิดข้อผิดพลาด");
+  }
+} finally {
+  setEditLoading(false);
+}
+ };
 
   // ฟังก์ชัน handleDelete (logic ลบข้อมูล)
   const handleDelete = async (id: string) => {
@@ -511,17 +501,22 @@ export default function SterilizerLoadsCardView({
       const snap = await getDocs(q);
       setLoads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
-    } catch (err: any) {
-      setEditError(err.message || "เกิดข้อผิดพลาดในการลบข้อมูล");
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
+      
+  } catch (err: unknown) {
+  if (err instanceof Error) {
+    setEditError(err.message);
+  } else {
+    setEditError("เกิดข้อผิดพลาดในการลบข้อมูล");
+  }
+} finally {
+  setDeleteLoading(false);
+}
+};
 
   if (loading) return <div className="text-center text-gray-500 py-8">กำลังโหลดข้อมูล...</div>;
   if (loads.length === 0) return <div className="text-center text-gray-400 py-12 text-lg">ยังไม่มีข้อมูลรอบการทำงาน</div>;
 
-  // --- Export CSV ---
+
   async function handleExportCsv() {
     if (!filteredLoads || filteredLoads.length === 0) {
       await Swal.fire({
@@ -538,6 +533,7 @@ export default function SterilizerLoadsCardView({
       "วันที่",
       "รอบที่",
       "SN",
+      "หม้อที่",
       "โปรแกรม",
       "อุปกรณ์",
       "เทปภายนอก",
@@ -559,6 +555,7 @@ export default function SterilizerLoadsCardView({
         : (typeof e.date === 'string' ? e.date : (e.date ?? "")),
       e.sterilizer ?? "",
       e.attest_sn ?? e.serial_number ?? "",
+      e.potNumber ?? "",
       e.program ?? "",
       Array.isArray(e.items)
         ? e.items.map((i: any) => (typeof i === 'string' ? i : (i.name || '')).replace(/"/g, '""')).join(';')
@@ -963,7 +960,7 @@ export default function SterilizerLoadsCardView({
                     </tr>
                   </thead>
                   <tbody>
-                    {load.items.slice(0, 5).map((item: any, idx: number) => (
+                    {load.items.slice(0, 5).map((item: SterilizerItem, idx: number) => (
                       <tr key={idx} className="text-black">
                         <td className="border border-black p-1 text-center text-black">{idx + 1}</td>
                         <td className="border border-black p-1 text-black">{item.name}</td>
@@ -1060,7 +1057,7 @@ export default function SterilizerLoadsCardView({
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedLoad.items.map((item: any, idx: number) => (
+                          {selectedLoad.items.map((item: SterilizerItem, idx: number) => (
                             <tr key={idx} className="border-t">
                               <td className="p-2">{idx + 1}</td>
                               <td className="p-2">{item.name}</td>
@@ -1144,4 +1141,4 @@ export default function SterilizerLoadsCardView({
       )}
     </div>
   );
-} 
+}

@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
           '<=': string;
         };
 
-        // Define the type for filters
+        
         type LogFilters = {
           program?: string;
           status?: string;
@@ -372,12 +372,7 @@ export async function GET(request: NextRequest) {
       
       case 'get-dashboard-metrics': {
         // Get dashboard metrics with pre-aggregated data
-        const startDate = searchParams.get('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const endDate = searchParams.get('endDate') || new Date().toISOString();
-        const groupBy = searchParams.get('groupBy') || 'program';
-        
-        // For now, return empty metrics until we implement aggregation
-        // In a real implementation, you would call a function that aggregates logs
+      
         const metrics = {
           summary: {
             totalLogs: 0,

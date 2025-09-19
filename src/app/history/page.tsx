@@ -7,28 +7,19 @@ import {
   logAuditAction, 
   getUserRole, 
   collection, 
-  query, 
-  orderBy, 
-  onSnapshot, 
   doc, 
   updateDoc, 
-  deleteDoc, 
-  getDoc, 
   addDoc, 
-  getDocs, 
   serverTimestamp,
   Timestamp,
   FirebaseUser,
   firebaseAuthStateChanged,
-  firebaseSignOut,
   signOutUser,
   auth,
   db
 } from "@/dbService";
 
-type AppUser = FirebaseUser & {
-  role?: string;
-};
+
 import Link from "next/link";
 import Swal from 'sweetalert2';
 
@@ -40,22 +31,9 @@ import DuplicateModal from './DuplicateModal';
 import { FormData } from './HistoryFormModal';
 import BubbleBackground from "@/components/BubbleBackground";
 
-type TestResult = 'ผ่าน' | 'ไม่ผ่าน';
-
-interface CheckboxResults {
-  mechanical?: TestResult;
-  chemical_external?: TestResult;
-  chemical_internal?: TestResult;
-  bio_test?: TestResult;
-}
-
-
-interface DuplicateEntry {
-  image_url: string;
-  extracted_text: string;
-}
-
-
+type AppUser = FirebaseUser & {
+  role?: string;
+};
 
 const UserDropdown = ({ user, role, onLogout }: { user: AppUser | null, role: string, onLogout: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -138,9 +116,6 @@ const UserDropdown = ({ user, role, onLogout }: { user: AppUser | null, role: st
 };
 
 
-
-
-// Initialize form with default values that match the FormData type
 const initialForm: FormData = {
   status: "PASS",
   program: "",
@@ -172,10 +147,6 @@ export default function HistoryPage() {
     setDateRange(range);
   };
   
-  const handleClearAllFilters = () => {
-    setClearAllFiltersTrigger(t => t + 1);
-    setDateRange({ startDate: '', endDate: '' });
-  };
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string>('');
@@ -193,51 +164,16 @@ export default function HistoryPage() {
   const offsetStart = useRef({ x: 0, y: 0 });
   const [touchStart, setTouchStart] = useState({ x: 0, y: 0, distance: 0 });
   const [lastTap, setLastTap] = useState(0);
-  const [editOcr, setEditOcr] = useState<Partial<SterilizerEntry> | null>(null);
-  const [editOcrForm, setEditOcrForm] = useState<Partial<SterilizerEntry>>({});
-  const [editOcrLoading, setEditOcrLoading] = useState(false);
-  const [editOcrError, setEditOcrError] = useState("");
-  // State for form and UI
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [ocrText, setOcrText] = useState<string>("");
-  const [showOcrModal, setShowOcrModal] = useState(false);
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState("");
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [duplicateEntries, setDuplicateEntries] = useState<SterilizerEntry[]>([]);
-  const [duplicateType, setDuplicateType] = useState<'image' | 'text' | 'both'>('image');
+  const [duplicateEntries] = useState<SterilizerEntry[]>([]);
+  const [duplicateType] = useState<'image' | 'text' | 'both'>('image');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // OCR state
-  const [lastOcrApiResult, setLastOcrApiResult] = useState<Record<string, unknown> | null>(null);
 
-  // Image zoom/pan state for edit modal
-  const [zoom2, setZoom2] = useState(1);
-  const [offset2, setOffset2] = useState({ x: 0, y: 0 });
-  const [dragging2, setDragging2] = useState(false);
-  const dragStart2 = useRef({ x: 0, y: 0 });
-  const offsetStart2 = useRef({ x: 0, y: 0 });
-
-  // --- เพิ่ม state สำหรับ overlay รูปใหญ่ ---
-  const [showBigImage1, setShowBigImage1] = useState(false);
-  const [showBigImage2, setShowBigImage2] = useState(false);
-
-  // --- เพิ่ม state zoom/offset/dragging สำหรับ overlay modal รูปใหญ่ ---
-  const [zoomBig1, setZoomBig1] = useState(1);
-  const [offsetBig1, setOffsetBig1] = useState({ x: 0, y: 0 });
-  const [draggingBig1, setDraggingBig1] = useState(false);
-  const dragStartBig1 = useRef({ x: 0, y: 0 });
-  const offsetStartBig1 = useRef({ x: 0, y: 0 });
-  const [zoomBig2, setZoomBig2] = useState(1);
-  const [offsetBig2, setOffsetBig2] = useState({ x: 0, y: 0 });
-  const [draggingBig2, setDraggingBig2] = useState(false);
-  const dragStartBig2 = useRef({ x: 0, y: 0 });
-  const offsetStartBig2 = useRef({ x: 0, y: 0 });
 
   const handleZoomIn = () => setZoom(z => Math.min(z + 0.2, 5));
   const handleZoomOut = () => setZoom(z => Math.max(z - 0.2, 1));
@@ -266,13 +202,11 @@ export default function HistoryPage() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      // Single touch - start panning
       setDragging(true);
       const touch = e.touches[0];
       dragStart.current = { x: touch.clientX, y: touch.clientY };
       offsetStart.current = { ...offset };
     } else if (e.touches.length === 2) {
-      // Two touches - start pinch zoom
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
       const distance = Math.sqrt(
@@ -284,16 +218,13 @@ export default function HistoryPage() {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    // Remove preventDefault to fix passive event listener error
     if (e.touches.length === 1 && dragging) {
-      // Single touch - panning
       const touch = e.touches[0];
       setOffset({
         x: offsetStart.current.x + (touch.clientX - dragStart.current.x),
         y: offsetStart.current.y + (touch.clientY - dragStart.current.y),
       });
     } else if (e.touches.length === 2) {
-      // Two touches - pinch zoom
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
       const distance = Math.sqrt(
@@ -313,37 +244,14 @@ export default function HistoryPage() {
     setTouchStart({ x: 0, y: 0, distance: 0 });
   };
 
-  const handleImageTouch = (e: React.TouchEvent) => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-    
-    if (now - lastTap < DOUBLE_TAP_DELAY) {
-      // Double tap detected
-      handleResetZoom();
-      setLastTap(0);
-    } else {
-      setLastTap(now);
-    }
-  };
-
-  const handleCloseOcrModal = () => {
-    setShowOcrModal(false);
-    setPreviewImage(null);
-    setOcrText("");
-    setOcrLoading(false);
-  };
-
   useEffect(() => {
     const unsubscribe = firebaseAuthStateChanged(auth, 
       (user: FirebaseUser | null) => {
         if (user) {
           setUser(user as AppUser);
-          // Get user role
           (async () => {
             try {
-              console.log('Getting role for user:', user.email);
               const userRole = await getUserRole(user.email || user.uid);
-              console.log('User role in history page:', userRole);
               setRole(userRole);
               setLoading(false);
             } catch (error) {
@@ -376,24 +284,13 @@ export default function HistoryPage() {
 
   
 
-  // handle edit form change
-  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  // save edit
-  const handleEditSave = async (formData: any) => {
+  const handleEditSave = async (formData: Partial<SterilizerEntry>) => {
     setEditLoading(true);
     setEditError("");
     
     try {
       if (!edit) return;
       
-      // Ensure sterilizer field is included in the update
       const updateData = {
         ...formData,
         sterilizer: formData.sterilizer || '',
@@ -401,8 +298,6 @@ export default function HistoryPage() {
       };
       
       await updateDoc(doc(db, 'sterilizer_loads', edit.id), updateData);
-      
-      // Log the edit action
       if (user) {
         await logAuditAction(
           'UPDATE',
@@ -437,9 +332,7 @@ export default function HistoryPage() {
     }
   };
 
-  // delete entry
   const handleDelete = async () => {
-    // Implementation removed
   };
 
   const handleLogout = async () => {
@@ -452,40 +345,13 @@ export default function HistoryPage() {
   };
 
  
-  // handle edit OCR form change
-  const handleEditOcrChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setEditOcrForm({ ...editOcrForm, [e.target.name]: e.target.value });
-  };
-  
-  // save edit OCR
-  const handleEditOcrSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Implementation removed
-  };
-  
-  // delete OCR entry
-  const handleDeleteOcr = async () => {
-    // Implementation removed
-  };
 
-  const checkForDuplicates = async (imageUrl: string, extractedText: string) => {
-    return [];
-  };
-
-  const handleSaveOcrEntry = async () => {
-    // Implementation removed
-  };
-
-  const saveOcrEntry = async () => {
-    // Implementation removed
-  };
 
   const handleProceedWithSave = async () => {
     setShowDuplicateModal(false);
   };
 
-  // รับ FormData ที่มีฟิลด์ date (จาก HistoryFormModal)
-  const handleSubmit = async (formData: any) => {
+  const handleSubmit = async (formData: FormData) => {
     setSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -495,21 +361,17 @@ export default function HistoryPage() {
       return;
     }
     try {
-      // Remove device_id if present
       const formWithoutDeviceId = { ...formData };
       if ('device_id' in formWithoutDeviceId) delete formWithoutDeviceId.device_id;
-      // Filter items
       const filteredItems = Array.isArray(formWithoutDeviceId.items)
-        ? formWithoutDeviceId.items.filter((item: any) => Boolean(item.name) || Boolean(item.quantity))
+        ? formWithoutDeviceId.items.filter((item: { name?: string; quantity?: string | number }) => Boolean(item.name) || Boolean(item.quantity))
         : [];
-      // Add the new document
       const docRef = await addDoc(collection(db, "sterilizer_loads"), {
         ...formWithoutDeviceId,
         items: filteredItems,
         created_by: user?.email,
         created_at: Timestamp.now(),
       });
-      // Log the audit action
       if (user) {
         await logAuditAction(
           'CREATE',
@@ -536,45 +398,6 @@ export default function HistoryPage() {
     }
   };
 
-
-  useEffect(() => {
-    if (editOcr) {
-      // OCR zoom/offset reset removed as it wasn't being used
-    }
-  }, [editOcr]);
-
-  useEffect(() => {
-    if (showBigImage1 || showBigImage2) {
-      const original = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = original; };
-    }
-  }, [showBigImage1, showBigImage2]);
-
-  const overlayRef1 = useRef<HTMLDivElement>(null);
-  const overlayRef2 = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showBigImage1) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoomBig1(z => Math.max(0.5, Math.min(5, z + (e.deltaY < 0 ? 0.1 : -0.1))));
-    };
-    const el = overlayRef1.current;
-    if (el) el.addEventListener('wheel', handler, { passive: false });
-    return () => { if (el) el.removeEventListener('wheel', handler); };
-  }, [showBigImage1]);
-
-  useEffect(() => {
-    if (!showBigImage2) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoomBig2(z => Math.max(0.5, Math.min(5, z + (e.deltaY < 0 ? 0.1 : -0.1))));
-    };
-    const el = overlayRef2.current;
-    if (el) el.addEventListener('wheel', handler, { passive: false });
-    return () => { if (el) el.removeEventListener('wheel', handler); };
-  }, [showBigImage2]);
 
   useEffect(() => {
     if (showForm) {
@@ -654,19 +477,7 @@ export default function HistoryPage() {
             />
           )}
           
-          {editOcr && (
-            <EditLoadModal
-              editForm={editOcrForm}
-              setEditForm={setEditOcrForm}
-              onSave={handleEditOcrSave}
-              onDelete={handleDeleteOcr}
-              loading={editOcrLoading}
-              deleteLoading={false}
-              error={editOcrError}
-              allLoads={entries}
-              user={user}
-            />
-          )}
+
         </div>
         <HistoryFormModal
           show={showForm}
