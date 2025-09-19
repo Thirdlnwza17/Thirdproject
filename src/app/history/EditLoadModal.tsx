@@ -621,15 +621,10 @@ const getRandomDurationByProgram = (program: string): string => {
           
           // ตรวจสอบผล BI จาก OCR
           let biResult = '';
-          const hasPlusSymbol = ocrRaw.includes('+');
+          const hasMinusSymbol = ocrRaw.includes('-');
           
-          if (hasPlusSymbol) {
-            // ถ้าพบเครื่องหมาย + ให้ตั้งค่าเป็นไม่ผ่าน
-            biResult = 'ไม่ผ่าน';
-          } else {
-            // ถ้าไม่พบ + ให้ตั้งค่าเป็นผ่าน
-            biResult = 'ผ่าน';
-          }
+          // ตั้งค่าเป็น 'ผ่าน' เมื่อพบเครื่องหมาย -
+          biResult = hasMinusSymbol ? 'ผ่าน' : 'ไม่ผ่าน';
 
           // ดึงข้อมูลจาก OCR
           const lines = ocrRaw.split('\n').map((l: string) => l.trim()).filter(Boolean);
@@ -671,10 +666,10 @@ const getRandomDurationByProgram = (program: string): string => {
           updates.bio_test = biResult; // Auto-set the bio_test field based on OCR result
           
           // เพิ่มข้อความแจ้งเตือนผลการตรวจสอบ
-          if (hasPlusSymbol) {
-            alertMessages.push('ผลตรวจสอบชีวภาพ: ตรวจพบเครื่องหมาย + ตั้งค่าเป็น "ไม่ผ่าน"');
+          if (hasMinusSymbol) {
+            alertMessages.push('ผลตรวจสอบชีวภาพ: ตรวจพบเครื่องหมาย - ตั้งค่าเป็น "ผ่าน"');
           } else {
-            alertMessages.push('ผลตรวจสอบชีวภาพ: ไม่พบเครื่องหมาย + ตั้งค่าเป็น "ผ่าน"');
+            alertMessages.push('ผลตรวจสอบชีวภาพ: ไม่พบเครื่องหมาย - ตั้งค่าเป็น "ไม่ผ่าน"');
           }
           // ถ้าเจอวันที่จาก Attest OCR ให้อัปเดตฟอร์ม
           if (attestDate) {
