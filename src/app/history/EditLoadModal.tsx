@@ -129,9 +129,47 @@ export default function EditLoadModal({
     setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
     setSearchTerm(prev => ({ ...prev, [rowIndex]: '' }));
     
-    // Focus on quantity field after selection
-    const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
-    qtyInput?.focus();
+    // Add a new row if this is the last row
+    if (rowIndex === (editForm.items?.length || 1) - 1) {
+      const updatedItems = [...newItems, { name: '', quantity: '' }];
+      setEditForm({ ...editForm, items: updatedItems });
+    }
+    
+    // Focus on the next row's name field
+    setTimeout(() => {
+      const nextRowIndex = rowIndex + 1;
+      const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${nextRowIndex}"]`);
+      nextNameInput?.focus();
+    }, 0);
+  };
+  
+  // Handle input changes (for QR code scanning)
+  const handleInput = (e: React.FormEvent<HTMLInputElement>, rowIndex: number, field: 'name' | 'quantity') => {
+    const target = e.target as HTMLInputElement;
+    const value = target.value;
+    
+    // Check for QR code input (typically ends with Enter or Tab)
+    if (field === 'name' && (value.includes('\n') || value.includes('\t'))) {
+      e.preventDefault();
+      const cleanValue = value.replace(/[\n\t]/g, '').trim();
+      
+      // Update the input value without the special characters
+      const newItems = [...(editForm.items || [])];
+      newItems[rowIndex] = { ...newItems[rowIndex], name: cleanValue };
+      
+      // Add a new row if this is the last row
+      if (rowIndex === (editForm.items?.length || 1) - 1) {
+        newItems.push({ name: '', quantity: '' });
+      }
+      
+      setEditForm({ ...editForm, items: newItems });
+      
+      // Focus on the next row's name field
+      setTimeout(() => {
+        const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${rowIndex + 1}"]`);
+        nextNameInput?.focus();
+      }, 0);
+    }
   };
   
   // Handle input focus to show recent searches or clear results
@@ -1542,6 +1580,7 @@ const getRandomDurationByProgram = (program: string): string => {
                                 }
                               }
                             }}
+                            onInput={(e) => handleInput(e, i, 'name')}
                             autoFocus={i === 0 && (editForm.items?.length || 0) === 1}
                           />
                           {isSearching[i] && (

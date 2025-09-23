@@ -123,9 +123,17 @@ export default function HistoryFormModal({
     setSearchResults(prev => ({ ...prev, [rowIndex]: [] }));
     setSearchTerm(prev => ({ ...prev, [rowIndex]: '' }));
     
-    // Focus on quantity field after selection
-    const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
-    qtyInput?.focus();
+    // Add a new row if this is the last row
+    if (rowIndex === rowCount - 1) {
+      addRow();
+    }
+    
+    // Focus on the next row's name field
+    setTimeout(() => {
+      const nextRowIndex = rowIndex + 1;
+      const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${nextRowIndex}"]`);
+      nextNameInput?.focus();
+    }, 0);
   };
 
   // Handle input focus to show recent searches or clear results
@@ -187,9 +195,16 @@ export default function HistoryFormModal({
       newItems[rowIndex] = { ...newItems[rowIndex], name: cleanValue };
       setForm(prev => ({ ...prev, items: newItems }));
       
-      // Move to quantity field
-      const qtyInput = document.querySelector<HTMLInputElement>(`input[name="item_qty_${rowIndex}"]`);
-      qtyInput?.focus();
+      // Add a new row if this is the last row
+      if (rowIndex === rowCount - 1) {
+        addRow();
+      }
+      
+      // Focus on the next row's name field
+      setTimeout(() => {
+        const nextNameInput = document.querySelector<HTMLInputElement>(`input[name="item_name_${rowIndex + 1}"]`);
+        nextNameInput?.focus();
+      }, 0);
     }
   };
 

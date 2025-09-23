@@ -429,7 +429,7 @@ export default function HistoryPage() {
               />
             </Link>
             <h1 className="text-2xl font-extrabold text-center drop-shadow">
-              <span className="text-sky-400">ประวัติการบันทึก</span>{' '}
+              <span className="text-sky-400">การบันทึก</span>{' '}
               <span className="text-blue-700">Sterilizer</span>
             </h1>
           </div>

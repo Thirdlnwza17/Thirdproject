@@ -449,9 +449,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Link 
               href="/history" 
-              className="px-4 sm:px-6 py-2 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg text-center text-sm sm:text-base whitespace-nowrap"
+              className="px-6 py-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg text-center text-sm sm:text-base whitespace-nowrap"
             >
-              History
+              Record
             </Link>
             <UserDropdown user={user} role={role} onLogout={handleLogout} />
           </div>

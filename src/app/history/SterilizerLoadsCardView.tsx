@@ -11,6 +11,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  Timestamp,
   FirebaseUser,
   getDocs, 
   getDoc, 
@@ -21,6 +22,20 @@ import EditLoadModal from './EditLoadModal';
 import SterilizerLoadsCompactView from './SterilizerLoadsCompactView';
 import { VercelDateRangePicker } from '@/components/VercelDateRangePicker';
 
+interface SortableLoad {
+  date?: Date | Timestamp | null;
+  updated_at?: Date | Timestamp | null;
+  created_at?: Date | Timestamp | null;
+}
+
+interface EditFormData {
+  id: string;
+  attest_sn?: string;
+  attest_time?: string;
+  total_duration?: string | number;
+  [key: string]: unknown; 
+}
+
 interface SterilizerItem {
   name: string;
   quantity?: string | number;
@@ -29,6 +44,11 @@ interface SterilizerItem {
 
 interface SterilizerLoad {
   items?: SterilizerItem[];
+  id: string;
+  attest_sn?: string;
+  attest_time?: string;
+  total_duration?: string;
+  sterilizer?: string;
   mechanical?: string;
   chemical_external?: string;
   chemical_internal?: string;
@@ -89,6 +109,8 @@ export const getStatuses = (load: SterilizerLoad): StatusType[] => {
   }
 };
 
+
+
 interface SterilizerLoadsCardViewProps {
   user: any;
   clearAllFiltersTrigger?: number;
@@ -139,7 +161,7 @@ export default function SterilizerLoadsCardView({
       onDateRangeChange({ startDate: '', endDate: '' });
     }
   };
-  // State for Card View
+  
   const [viewMode, setViewMode] = useState<'compact' | 'detailed'>('compact');
   const [selectedLoad, setSelectedLoad] = useState<any>(null);
   const [loads, setLoads] = useState<any[]>([]);
@@ -153,7 +175,7 @@ export default function SterilizerLoadsCardView({
   const itemsPerPage = viewMode === 'compact' ? 15 : 6;
   const [lastUpdatedId, setLastUpdatedId] = useState<string | null>(null);
   const cardRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
-  const [editForm, setEditForm] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<SterilizerLoad | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editError, setEditError] = useState("");
@@ -281,16 +303,28 @@ export default function SterilizerLoadsCardView({
     return sterileStaff.includes(staffName) || resultReader.includes(staffName);
   };
 
-  // ฟังก์ชัน  // Sort function based on selected field and order
-  const sortLoads = (a: any, b: any) => {
-    let aValue, bValue;
+
+  const sortLoads = (a: SortableLoad, b: SortableLoad) => {
+    let aValue: Date | number;
+    let bValue: Date | number;
     
     if (sortBy === 'date') {
-      aValue = a.date?.toDate ? a.date.toDate() : (a.date || 0);
-      bValue = b.date?.toDate ? b.date.toDate() : (b.date || 0);
+      aValue = a.date && typeof a.date === 'object' && 'toDate' in a.date ? a.date.toDate() : (a.date || 0);
+      bValue = b.date && typeof b.date === 'object' && 'toDate' in b.date ? b.date.toDate() : (b.date || 0);
     } else { // lastUpdated
-      aValue = a.updated_at?.toDate ? a.updated_at.toDate() : (a.updated_at || a.created_at?.toDate?.() || new Date(0));
-      bValue = b.updated_at?.toDate ? b.updated_at.toDate() : (b.updated_at || b.created_at?.toDate?.() || new Date(0));
+      const getDateValue = (date?: Date | Timestamp | null, fallback?: Date | Timestamp | null): Date | number => {
+        if (date && typeof date === 'object' && 'toDate' in date) {
+          return date.toDate();
+        }
+        if (date) return date as Date;
+        if (fallback && typeof fallback === 'object' && 'toDate' in fallback) {
+          return fallback.toDate();
+        }
+        return fallback || new Date(0);
+      };
+      
+      aValue = getDateValue(a.updated_at, a.created_at);
+      bValue = getDateValue(b.updated_at, b.created_at);
     }
     
     // Handle cases where values might be undefined
@@ -417,7 +451,7 @@ export default function SterilizerLoadsCardView({
     setCurrentPage(1);
   }, [viewMode]);
 
-  const handleEditSave = async (formData: any) => {
+  const handleEditSave = async (formData: EditFormData) => {
     setEditLoading(true);
     setEditError("");
     try {
@@ -549,16 +583,16 @@ export default function SterilizerLoadsCardView({
       (
         e.date &&
         typeof e.date === 'object' &&
-        typeof (e.date as any).toDate === 'function'
+        typeof (e.date as Timestamp).toDate === 'function'
       )
-        ? (e.date as any).toDate().toISOString().slice(0, 10)
+        ? (e.date as Timestamp).toDate().toISOString().slice(0, 10)
         : (typeof e.date === 'string' ? e.date : (e.date ?? "")),
       e.sterilizer ?? "",
       e.attest_sn ?? e.serial_number ?? "",
       e.potNumber ?? "",
       e.program ?? "",
       Array.isArray(e.items)
-        ? e.items.map((i: any) => (typeof i === 'string' ? i : (i.name || '')).replace(/"/g, '""')).join(';')
+        ? e.items.map((i: string | SterilizerItem) => (typeof i === 'string' ? i : (i.name || '')).replace(/"/g, '""')).join(';')
         : (typeof e.items === 'string' ? e.items.replace(/"/g, '""') : ''),
       e.chemical_external ?? "",
       e.chemical_internal ?? "",
