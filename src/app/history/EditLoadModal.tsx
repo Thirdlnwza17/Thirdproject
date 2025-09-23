@@ -26,7 +26,7 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
       return reject(new Error('Invalid dimensions provided'));
     }
     if (quality <= 0 || quality > 1) {
-      quality = 0.7; // Default quality if invalid
+      quality = 0.5; // Default quality if invalid
     }
 
     const img = new Image();
@@ -98,7 +98,7 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
       }
     };
 
-    // Start loading the image
+
     img.src = objectUrl;
   });
 };
