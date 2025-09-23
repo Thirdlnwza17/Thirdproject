@@ -16,17 +16,21 @@ import { logAuditAction } from '@/dbService';
  * @param {number} [quality=0.7] - Image quality (0 to 1)
  * @returns {Promise<string>} Promise that resolves with base64 string of the resized image
  */
-const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.7): Promise<string> => {
+const resizeImage = (file: File, maxWidth: number = 1200, maxHeight: number = 1200, quality = 0.6): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Validate input
     if (!file || !(file instanceof Blob)) {
       return reject(new Error('Invalid file provided'));
     }
-    if (maxWidth <= 0 || maxHeight <= 0) {
-      return reject(new Error('Invalid dimensions provided'));
-    }
-    if (quality <= 0 || quality > 1) {
-      quality = 0.5; // Default quality if invalid
+    
+    // Set smaller default dimensions
+    maxWidth = Math.min(maxWidth, 1200);
+    maxHeight = Math.min(maxHeight, 1200);
+    
+    // Adjust quality for very large files
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 5) {
+      quality = Math.max(0.4, quality - 0.2); // Lower quality for files > 5MB
     }
 
     const img = new Image();
@@ -45,9 +49,10 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
         // Calculate new dimensions while maintaining aspect ratio
         let { width, height } = img;
         const isPortrait = height > width;
+        const scale = Math.min(maxWidth / width, maxHeight / height, 1); // Never scale up
         
-        if (width > maxWidth || height > maxHeight) {
-          const scale = Math.min(maxWidth / width, maxHeight / height);
+        // Only resize if the image is larger than target
+        if (scale < 1) {
           width = Math.floor(width * scale);
           height = Math.floor(height * scale);
         }
@@ -72,23 +77,29 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to Blob with specified quality
+        // Convert to Blob with specified quality and additional optimizations
         canvas.toBlob(
           (blob) => {
             if (!blob) {
               throw new Error('Failed to create blob from canvas');
             }
             
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (typeof reader.result === 'string') {
-                resolve(reader.result);
-              } else {
-                reject(new Error('Failed to read blob as data URL'));
-              }
-            };
-            reader.onerror = () => reject(new Error('Error reading blob'));
-            reader.readAsDataURL(blob);
+            // If the blob is still too large, reduce quality further
+            if (blob.size > 500 * 1024) { // If > 500KB
+              const reducedQuality = Math.max(0.3, quality - 0.2);
+              canvas.toBlob(
+                (smallerBlob) => {
+                  if (!smallerBlob) {
+                    throw new Error('Failed to create optimized blob');
+                  }
+                  resolve(URL.createObjectURL(smallerBlob));
+                },
+                'image/jpeg',
+                reducedQuality
+              );
+            } else {
+              resolve(URL.createObjectURL(blob));
+            }
           },
           'image/jpeg',
           quality
