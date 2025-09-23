@@ -8,6 +8,156 @@ import { debounce } from 'lodash';
 import { collection, getDocs, doc, getDoc } from '@/dbService';
 import { logAuditAction } from '@/dbService';
 
+/**
+ * Resizes and compresses an image file while maintaining aspect ratio
+ * @param {File} file - The image file to resize
+ * @param {number} maxWidth - Maximum width in pixels
+ * @param {number} maxHeight - Maximum height in pixels
+ * @param {number} [quality=0.7] - Image quality (0 to 1)
+ * @returns {Promise<string>} Promise that resolves with base64 string of the resized image
+ */
+const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    // Validate input
+    if (!file || !(file instanceof Blob)) {
+      return reject(new Error('Invalid file provided'));
+    }
+    if (maxWidth <= 0 || maxHeight <= 0) {
+      return reject(new Error('Invalid dimensions provided'));
+    }
+    if (quality <= 0 || quality > 1) {
+      quality = 0.7; // Default quality if invalid
+    }
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    
+    // Handle image load errors
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load image'));
+    };
+
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(objectUrl); // Clean up object URL
+        
+        // Calculate new dimensions while maintaining aspect ratio
+        let { width, height } = img;
+        const isPortrait = height > width;
+        
+        if (width > maxWidth || height > maxHeight) {
+          const scale = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.floor(width * scale);
+          height = Math.floor(height * scale);
+        }
+
+        // Create canvas with the new dimensions
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        // Set image rendering quality
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) {
+          throw new Error('Could not get canvas context');
+        }
+        
+        // Improve image quality for the resize
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw the image on the canvas with white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to Blob with specified quality
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              throw new Error('Failed to create blob from canvas');
+            }
+            
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                resolve(reader.result);
+              } else {
+                reject(new Error('Failed to read blob as data URL'));
+              }
+            };
+            reader.onerror = () => reject(new Error('Error reading blob'));
+            reader.readAsDataURL(blob);
+          },
+          'image/jpeg',
+          quality
+        );
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    // Start loading the image
+    img.src = objectUrl;
+  });
+};
+
+interface WindowWithLastTap extends Window {
+  _lastTap?: number;
+}
+
+
+interface UserWithRole extends User {
+  role?: string;
+}
+
+interface EditForm {
+  which: number[];
+  items?: Array<{
+    id?: string;
+    name: string;
+    quantity?: number;
+    lot?: string;
+    expiry?: string;
+    itemId?: string;
+  }>;
+  sterile_staff?: string;
+  result_reader?: string;
+  program?: string;
+  prevac?: boolean;
+  c134c?: boolean;
+  s9?: boolean;
+  d20?: boolean;
+  mechanical?: string;
+  chemical_external?: string;
+  chemical_internal?: string;
+  bio_test?: string;
+  image_url_1?: string;
+  image_url_2?: string;
+
+}
+
+interface SterilizerItem {
+  name: string;
+  id: string;
+  quantity?: string | number;
+  [key: string]: unknown;
+}
+
+
+type ExtendedMediaTrackConstraints = MediaTrackConstraintSet & {
+  focusMode?: ConstrainDOMString;
+};
+
+type MediaTrackConstraintsWithAdvanced = MediaTrackConstraints & {
+  advanced?: Array<{
+    focusMode?: string;
+    focusDistance?: number;
+    [key: string]: unknown;
+  }>;
+};
+
 interface Item {
   id: string;
   name: string;
@@ -210,7 +360,7 @@ export default function EditLoadModal({
     const savedReader = localStorage.getItem('result_reader');
     const userName = user.displayName || user.email || '';
 
-    setEditForm((prev: any) => {
+    setEditForm((prev: EditForm) => {
       const needStaff = !prev?.sterile_staff && (savedStaff || userName);
       const needReader = !prev?.result_reader && (savedReader || userName);
       if (!needStaff && !needReader) return prev;
@@ -454,7 +604,7 @@ export default function EditLoadModal({
       }
       if (idx === 1) {
         // Auto-tick ผ่าน for mechanical, chemical_external, chemical_internal
-        setEditForm((prev: any) => ({
+        setEditForm((prev: EditForm) => ({
           ...prev,
           mechanical: 'ผ่าน',
           chemical_external: 'ผ่าน',
@@ -555,7 +705,7 @@ const getRandomDurationByProgram = (program: string): string => {
             }
             
 
-            setEditForm((prev: any) => ({
+            setEditForm((prev: EditForm) => ({
               ...prev,
               ...updates
             }));
@@ -608,7 +758,7 @@ const getRandomDurationByProgram = (program: string): string => {
             stopOcrProgress();
           }
           setImage1(base64);
-          setEditForm((prev: any) => ({ ...prev, image_url_1: base64 }));
+          setEditForm((prev: EditForm) => ({ ...prev, image_url_1: base64 }));
         } catch {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           stopOcrProgress();
@@ -616,7 +766,7 @@ const getRandomDurationByProgram = (program: string): string => {
         }
       } else {
         // Auto-tick ผ่าน for bio_test when uploading image 2
-        setEditForm((prev: any) => ({
+        setEditForm((prev: EditForm) => ({
           ...prev,
           bio_test: 'ผ่าน'
         }));
@@ -650,7 +800,7 @@ const getRandomDurationByProgram = (program: string): string => {
               confirmButtonColor: '#3b82f6',
             });
             // clear attest image on the form when invalid
-            setEditForm((prev: any) => ({ ...prev, image_url_2: "" }));
+            setEditForm((prev: EditForm) => ({ ...prev, image_url_2: "" }));
           } finally {
             stopOcrProgress();
           }
@@ -731,7 +881,7 @@ const getRandomDurationByProgram = (program: string): string => {
             });
           }
           
-          setEditForm((prev: any) => ({ ...prev, ...updates }));
+          setEditForm((prev: EditForm) => ({ ...prev, ...updates }));
         } catch {
           alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
           return;
@@ -787,7 +937,7 @@ const getRandomDurationByProgram = (program: string): string => {
   // เพิ่ม useEffect สำหรับ auto-tick checkbox เมื่อเลือกโปรแกรม
   useEffect(() => {
     if (editForm.program === 'PREVAC' || editForm.program === 'BOWIE') {
-      setEditForm((prev: any) => ({
+      setEditForm((prev: EditForm) => ({
         ...prev,
         prevac: true,
         c134c: true,
@@ -795,7 +945,7 @@ const getRandomDurationByProgram = (program: string): string => {
         d20: true
       }));
     } else if (editForm.program === 'EO') {
-      setEditForm((prev: any) => ({
+      setEditForm((prev: EditForm) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -803,7 +953,7 @@ const getRandomDurationByProgram = (program: string): string => {
         d20: false
       }));
     } else if (editForm.program === 'Plasma') {
-      setEditForm((prev: any) => ({
+      setEditForm((prev: EditForm) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -811,7 +961,7 @@ const getRandomDurationByProgram = (program: string): string => {
         d20: false
       }));
     } else if (editForm.program) {
-      setEditForm((prev: any) => ({
+      setEditForm((prev: EditForm) => ({
         ...prev,
         prevac: false,
         c134c: false,
@@ -839,7 +989,7 @@ const getRandomDurationByProgram = (program: string): string => {
   };
 
   // ฟังก์ชันคำนวณสถานะ
-  const calculateStatus = (formData: any): string => {
+  const calculateStatus = (formData: EditForm): string => {
     // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
     const hasTestResults = 
       formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
@@ -898,7 +1048,7 @@ const getRandomDurationByProgram = (program: string): string => {
       const beforeData = docSnap.exists() ? docSnap.data() : {};
       
       // ตรวจสอบการเปลี่ยนแปลง
-      const changedFields: Record<string, { oldValue: any, newValue: any }> = {};
+      const changedFields: Record<string, { oldValue: unknown, newValue: unknown }> = {};
       
       // ตรวจสอบทุกฟิลด์ที่มีการเปลี่ยนแปลง
       Object.keys(formData).forEach(key => {
@@ -914,7 +1064,7 @@ const getRandomDurationByProgram = (program: string): string => {
       if (Object.keys(changedFields).length > 0 && user) {
         try {
           // สร้าง object สำหรับเก็บเฉพาะข้อมูลที่ต้องการบันทึก
-          const safeChanges: Record<string, { oldValue: any, newValue: any }> = {};
+          const safeChanges: Record<string, { oldValue: unknown, newValue: unknown }> = {};
           
           // ตรวจสอบและกรองข้อมูลที่จะบันทึก
           Object.entries(changedFields).forEach(([key, value]) => {
@@ -933,7 +1083,7 @@ const getRandomDurationByProgram = (program: string): string => {
             formData.id,
             user.uid,
             user.email || 'unknown',
-            (user as any)?.role || 'user',
+            (user as UserWithRole)?.role || 'user',
             {
               message: 'อัปเดตข้อมูลการนึ่งฆ่าเชื้อ' + (changedFields.notes ? ' (แก้ไขหมายเหตุ)' : ''),
               changed_fields: Object.keys(safeChanges),
@@ -1069,7 +1219,7 @@ const getRandomDurationByProgram = (program: string): string => {
         if (user) {
           const currentUser = usersList.find(u => u.email === user.email);
           if (currentUser) {
-            setEditForm((prev: any) => ({
+            setEditForm((prev: EditForm) => ({
               ...prev,
               sterile_staff: prev.sterile_staff || currentUser.fullName,
               result_reader: prev.result_reader || currentUser.fullName
@@ -1180,7 +1330,6 @@ const getRandomDurationByProgram = (program: string): string => {
   const switchCamera = async () => {
     if (!videoRef.current) return;
     
-    // Stop any existing tracks
     if (webcamStream) {
       webcamStream.getTracks().forEach(track => track.stop());
     }
@@ -1189,7 +1338,6 @@ const getRandomDurationByProgram = (program: string): string => {
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
       setFacingMode(newFacingMode);
       
-      // Base constraints
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: newFacingMode,
@@ -1203,8 +1351,9 @@ const getRandomDurationByProgram = (program: string): string => {
       // For iOS devices, use specific settings
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIOS) {
-        (constraints.video as any).facingMode = { exact: newFacingMode };
-        (constraints.video as any).deviceId = undefined; // Let the system choose the best camera
+        const videoConstraints = constraints.video as MediaTrackConstraints & { facingMode?: { exact: string }, deviceId?: string };
+        videoConstraints.facingMode = { exact: newFacingMode };
+        videoConstraints.deviceId = undefined; // Let the system choose the best camera
       }
       
       // Get the new stream with basic constraints
@@ -1229,8 +1378,8 @@ const getRandomDurationByProgram = (program: string): string => {
       const videoTrack = stream.getVideoTracks()[0];
       if (!videoTrack) return;
       
-      // Apply initial constraints
-      const constraints: MediaTrackConstraints = {
+      // Define constraints with proper typing
+      const constraints: ExtendedMediaTrackConstraints = {
         width: { ideal: 1920, min: 1280 },
         height: { ideal: 1080, min: 720 },
         frameRate: { ideal: 30, min: 24 },
@@ -1239,19 +1388,19 @@ const getRandomDurationByProgram = (program: string): string => {
       // Add focus settings if supported
       const supportedConstraints = navigator.mediaDevices.getSupportedConstraints();
       if ('focusMode' in supportedConstraints) {
-        (constraints as any).focusMode = 'continuous';
+        constraints.focusMode = 'continuous';
       }
-      
-      // Apply constraints
+    
       await videoTrack.applyConstraints(constraints);
       
-      // For iOS devices, apply additional settings
+      
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIOS && 'applyConstraints' in videoTrack) {
         try {
-          await videoTrack.applyConstraints({
-            advanced: [{ focusMode: 'continuous' }] as any
-          });
+          const advancedConstraints: MediaTrackConstraintsWithAdvanced = {
+            advanced: [{ focusMode: 'continuous' }]
+          };
+          await videoTrack.applyConstraints(advancedConstraints);
         } catch (err) {
           console.warn('Could not apply advanced constraints:', err);
         }
@@ -1266,11 +1415,12 @@ const getRandomDurationByProgram = (program: string): string => {
       setTimeout(async () => {
         try {
           if ('applyConstraints' in videoTrack) {
-            await videoTrack.applyConstraints({
-              advanced: [{ focusDistance: 0 }] as any
-            });
+            const focusConstraints: MediaTrackConstraintsWithAdvanced = {
+              advanced: [{ focusDistance: 0 }]
+            };
+            await videoTrack.applyConstraints(focusConstraints);
           }
-        } catch (err) {
+        } catch (err: unknown) {
           console.warn('Could not adjust focus:', err);
         }
       }, 1000);
@@ -1553,7 +1703,7 @@ const getRandomDurationByProgram = (program: string): string => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(editForm.items || []).map((item: any, i: number) => (
+                  {(editForm.items || []).map((item: SterilizerItem, i: number) => (
                     <tr key={i} className="text-black">
                       <td className="border p-1 text-center text-black">{i + 1}</td>
                       <td className="border p-1 text-black">
@@ -1818,7 +1968,7 @@ const getRandomDurationByProgram = (program: string): string => {
 
                     if (isConfirmed) {
                       setImage1("");
-                      setEditForm((prev: any) => ({ 
+                      setEditForm((prev: EditForm) => ({ 
                         ...prev, 
                         image_url_1: "",
                         // Clear autofilled data from sterile slip
@@ -1909,7 +2059,7 @@ const getRandomDurationByProgram = (program: string): string => {
                             editForm.id,
                             user.uid,
                             user.email || 'unknown',
-                            (user as any)?.role || 'user',
+                            (user as UserWithRole)?.role || 'user',
                             {
                               message: 'ลบรูปภาพ Attest',
                               changed_fields: ['image_url_2', 'attest_sn', 'attest_time', 'bio_test'],
@@ -1926,7 +2076,7 @@ const getRandomDurationByProgram = (program: string): string => {
                         console.error('Error saving audit log:', error);
                       }
                       
-                      setEditForm((prev: any) => ({ 
+                      setEditForm((prev: EditForm) => ({ 
                         ...prev, 
                         image_url_2: "",
                         // Clear autofilled data from attest
@@ -2010,7 +2160,7 @@ const getRandomDurationByProgram = (program: string): string => {
                         active ? 'bg-blue-100 border-blue-500' : 'bg-white hover:bg-gray-50'
                       }`}
                       onClick={() => {
-                        setEditForm((prev: any) => {
+                        setEditForm((prev: EditForm) => {
                           const prevWhich = Array.isArray(prev?.which) ? [...prev.which] : [];
                           const exists = prevWhich.includes(num);
                           const newWhich = exists ? prevWhich.filter(n => n !== num) : [...prevWhich, num];
@@ -2084,11 +2234,11 @@ const getRandomDurationByProgram = (program: string): string => {
               onTouchEnd={e => {
                 if (e.touches.length === 0) {
                   const now = Date.now();
-                  if ((window as any)._lastTap && now - (window as any)._lastTap < 300) {
+                  if ((window as WindowWithLastTap)._lastTap && now - (window as WindowWithLastTap)._lastTap! < 300) {
                     handleDoubleClick();
-                    (window as any)._lastTap = 0;
+                    (window as WindowWithLastTap)._lastTap = 0;
                   } else {
-                    (window as any)._lastTap = now;
+                    (window as WindowWithLastTap)._lastTap = now;
                   }
                 }
                 handleTouchEnd();
