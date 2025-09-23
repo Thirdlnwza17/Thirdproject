@@ -16,21 +16,17 @@ import { logAuditAction } from '@/dbService';
  * @param {number} [quality=0.7] - Image quality (0 to 1)
  * @returns {Promise<string>} Promise that resolves with base64 string of the resized image
  */
-const resizeImage = (file: File, maxWidth: number = 1200, maxHeight: number = 1200, quality = 0.6): Promise<string> => {
+const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Validate input
     if (!file || !(file instanceof Blob)) {
       return reject(new Error('Invalid file provided'));
     }
-    
-    // Set smaller default dimensions
-    maxWidth = Math.min(maxWidth, 1200);
-    maxHeight = Math.min(maxHeight, 1200);
-    
-    // Adjust quality for very large files
-    const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > 5) {
-      quality = Math.max(0.4, quality - 0.2); // Lower quality for files > 5MB
+    if (maxWidth <= 0 || maxHeight <= 0) {
+      return reject(new Error('Invalid dimensions provided'));
+    }
+    if (quality <= 0 || quality > 1) {
+      quality = 0.5; // Default quality if invalid
     }
 
     const img = new Image();
@@ -49,10 +45,9 @@ const resizeImage = (file: File, maxWidth: number = 1200, maxHeight: number = 12
         // Calculate new dimensions while maintaining aspect ratio
         let { width, height } = img;
         const isPortrait = height > width;
-        const scale = Math.min(maxWidth / width, maxHeight / height, 1); // Never scale up
         
-        // Only resize if the image is larger than target
-        if (scale < 1) {
+        if (width > maxWidth || height > maxHeight) {
+          const scale = Math.min(maxWidth / width, maxHeight / height);
           width = Math.floor(width * scale);
           height = Math.floor(height * scale);
         }
@@ -77,29 +72,23 @@ const resizeImage = (file: File, maxWidth: number = 1200, maxHeight: number = 12
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to Blob with specified quality and additional optimizations
+        // Convert to Blob with specified quality
         canvas.toBlob(
           (blob) => {
             if (!blob) {
               throw new Error('Failed to create blob from canvas');
             }
             
-            // If the blob is still too large, reduce quality further
-            if (blob.size > 500 * 1024) { // If > 500KB
-              const reducedQuality = Math.max(0.3, quality - 0.2);
-              canvas.toBlob(
-                (smallerBlob) => {
-                  if (!smallerBlob) {
-                    throw new Error('Failed to create optimized blob');
-                  }
-                  resolve(URL.createObjectURL(smallerBlob));
-                },
-                'image/jpeg',
-                reducedQuality
-              );
-            } else {
-              resolve(URL.createObjectURL(blob));
-            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                resolve(reader.result);
+              } else {
+                reject(new Error('Failed to read blob as data URL'));
+              }
+            };
+            reader.onerror = () => reject(new Error('Error reading blob'));
+            reader.readAsDataURL(blob);
           },
           'image/jpeg',
           quality
@@ -1452,33 +1441,24 @@ const getRandomDurationByProgram = (program: string): string => {
   }, [showWebcamModal, webcamStream]);
 
   const WebcamModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-md">
-        <div className="relative bg-black rounded-lg overflow-hidden mx-auto" style={{ maxWidth: '90vw', maxHeight: '90vh' }}>
-          <div className="relative" style={{ paddingTop: '75%' }}> {/* 4:3 aspect ratio */}
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              className="absolute top-0 left-0 w-full h-full object-cover"
-              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)' }}
-            />
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+      <div className="w-full max-w-lg">
+        <div className="relative bg-black rounded-lg overflow-hidden">
+          <video ref={videoRef} autoPlay playsInline className="w-full h-auto" />
           <canvas ref={canvasRef} className="hidden" />
-          <div className="absolute bottom-0 left-0 right-0 p-3 bg-black bg-opacity-70 flex flex-col items-center space-y-3">
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex flex-col items-center space-y-4">
             <div className="flex justify-center space-x-4 w-full">
               <button 
                 onClick={captureFromWebcam} 
-                className="w-14 h-14 rounded-full bg-white bg-opacity-20 border-4 border-white flex-shrink-0"
-                aria-label="ถ่ายภาพ"
+                className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white flex-shrink-0"
               >
-                <div className="w-6 h-6 bg-red-500 rounded-full mx-auto"></div>
+                <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
               </button>
             </div>
-            <div className="flex justify-between w-full px-2">
+            <div className="flex justify-between w-full px-4">
               <button 
                 onClick={closeWebcamModal} 
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
               >
                 ยกเลิก
               </button>
@@ -1486,9 +1466,8 @@ const getRandomDurationByProgram = (program: string): string => {
                 onClick={switchCamera}
                 className="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition-colors"
                 title="สลับกล้อง"
-                aria-label="สลับกล้อง"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
