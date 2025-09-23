@@ -1441,24 +1441,33 @@ const getRandomDurationByProgram = (program: string): string => {
   }, [showWebcamModal, webcamStream]);
 
   const WebcamModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-      <div className="w-full max-w-lg">
-        <div className="relative bg-black rounded-lg overflow-hidden">
-          <video ref={videoRef} autoPlay playsInline className="w-full h-auto" />
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+      <div className="w-full max-w-md">
+        <div className="relative bg-black rounded-lg overflow-hidden mx-auto" style={{ maxWidth: '90vw', maxHeight: '90vh' }}>
+          <div className="relative" style={{ paddingTop: '75%' }}> {/* 4:3 aspect ratio */}
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              className="absolute top-0 left-0 w-full h-full object-cover"
+              style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)' }}
+            />
+          </div>
           <canvas ref={canvasRef} className="hidden" />
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex flex-col items-center space-y-4">
+          <div className="absolute bottom-0 left-0 right-0 p-3 bg-black bg-opacity-70 flex flex-col items-center space-y-3">
             <div className="flex justify-center space-x-4 w-full">
               <button 
                 onClick={captureFromWebcam} 
-                className="w-16 h-16 rounded-full bg-white bg-opacity-20 border-4 border-white flex-shrink-0"
+                className="w-14 h-14 rounded-full bg-white bg-opacity-20 border-4 border-white flex-shrink-0"
+                aria-label="ถ่ายภาพ"
               >
-                <div className="w-8 h-8 bg-red-500 rounded-full mx-auto"></div>
+                <div className="w-6 h-6 bg-red-500 rounded-full mx-auto"></div>
               </button>
             </div>
-            <div className="flex justify-between w-full px-4">
+            <div className="flex justify-between w-full px-2">
               <button 
                 onClick={closeWebcamModal} 
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
               >
                 ยกเลิก
               </button>
@@ -1466,8 +1475,9 @@ const getRandomDurationByProgram = (program: string): string => {
                 onClick={switchCamera}
                 className="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition-colors"
                 title="สลับกล้อง"
+                aria-label="สลับกล้อง"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
