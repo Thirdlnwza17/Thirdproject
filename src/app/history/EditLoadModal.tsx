@@ -6,15 +6,26 @@ import { parseDurationToMinutes } from './durationUtils';
 import { FirebaseUser as User, db} from '@/dbService';
 import { debounce } from 'lodash';
 import { collection, getDocs, doc, getDoc } from '@/dbService';
-import { logAuditAction } from '@/dbService';
+import { 
+  logAuditAction,
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  listAll,
+  getMetadata,
+  updateMetadata,
+  StorageReference 
+} from '@/dbService';
 
 /**
- * Resizes and compresses an image file while maintaining aspect ratio
+
  * @param {File} file - The image file to resize
  * @param {number} maxWidth - Maximum width in pixels
  * @param {number} maxHeight - Maximum height in pixels
  * @param {number} [quality=0.7] - Image quality (0 to 1)
- * @returns {Promise<string>} Promise that resolves with base64 string of the resized image
+ * @returns {Promise<string>} 
  */
 const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -26,7 +37,7 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
       return reject(new Error('Invalid dimensions provided'));
     }
     if (quality <= 0 || quality > 1) {
-      quality = 0.5; // Default quality if invalid
+      quality = 0.5; 
     }
 
     const img = new Image();
@@ -578,15 +589,31 @@ export default function EditLoadModal({
 
   // handle upload image
   const handleUpload = async (idx: 1 | 2, file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target?.result as string;
-      // เช็คซ้ำกับทุก card ยกเว้นข้อมูลปัจจุบัน
+    try {
+      // Generate a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+      const storagePath = `sterilizer_images/${fileName}`;
+      
+      // Create a reference to the file in Firebase Storage
+      const storage = getStorage();
+      const storageRef = ref(storage, storagePath);
+      
+      // Upload the file
+      const snapshot = await uploadBytes(storageRef, file);
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      // Check for duplicate images using the download URL
       const isDuplicate = allLoads
-        .filter(load => load.id !== editForm.id) // ไม่ตรวจสอบกับข้อมูลปัจจุบัน
-        .some(load => load.image_url_1 === base64 || load.image_url_2 === base64);
+        .filter(load => load.id !== editForm.id)
+        .some(load => load.image_url_1 === downloadURL || load.image_url_2 === downloadURL);
       
       if (isDuplicate) {
+        // Delete the uploaded file since it's a duplicate
+        await deleteObject(storageRef);
+        
         // Start loading before showing alert
         startOcrProgress();
         try {
@@ -597,11 +624,18 @@ export default function EditLoadModal({
             confirmButtonText: 'ตกลง',
             confirmButtonColor: '#3b82f6',
           });
+          return;
         } finally {
           stopOcrProgress();
         }
-        return;
       }
+
+      // Update the form with the download URL
+      setEditForm((prev: any) => ({
+        ...prev,
+        [`image_url_${idx}`]: downloadURL,
+      }));
+
       if (idx === 1) {
         // Auto-tick ผ่าน for mechanical, chemical_external, chemical_internal
         setEditForm((prev: EditForm) => ({
@@ -613,12 +647,13 @@ export default function EditLoadModal({
         // OCR + Claude AI ตรวจสอบ slip เฉพาะช่อง 1
         startOcrProgress();
         try {
-          const base64Data = base64.split(',')[1];
+          // Send the Firebase Storage URL to the server for processing
           const response = await fetch('/api/claude-ocr', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64Data })
+            body: JSON.stringify({ imageUrl: downloadURL })
           });
+          
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || `API error: ${response.status}`);
@@ -637,15 +672,17 @@ export default function EditLoadModal({
                 confirmButtonText: 'ตกลง',
                 confirmButtonColor: '#3b82f6',
               });
-            } finally {
-              stopOcrProgress();
+            } catch (error) {
+              console.error('Error showing invalid image alert:', error);
             }
             return;
           }
-          if (base64 === image1) return; // ไม่แนบซ้ำกับตัวเอง
-          // ถ้าเป็นรูปที่ 1 (sterile slip) ให้ทำ OCR เพื่อหาและตั้งค่าวันที่
+          // Check if this is a duplicate of the current image
+          if (downloadURL === editForm[`image_url_${idx}`]) return;
+          
+          // Process OCR for sterilization slip (image 1)
           try {
-            // ใช้ข้อความ OCR ที่ได้จาก API โดยตรง
+            // Use the OCR text from the API
             const ocrText = ocrRaw;
             console.log('OCR Text:', ocrText); // Debug log
 
@@ -757,12 +794,19 @@ const getRandomDurationByProgram = (program: string): string => {
             // stop progress regardless
             stopOcrProgress();
           }
-          setImage1(base64);
-          setEditForm((prev: EditForm) => ({ ...prev, image_url_1: base64 }));
-        } catch {
-          alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
+          setImage1(downloadURL);
+          setEditForm((prev: EditForm) => ({ ...prev, image_url_1: downloadURL }));
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          await Swal.fire({
+            title: 'เกิดข้อผิดพลาด',
+            text: 'ไม่สามารถอัปโหลดรูปภาพได้ กรุณาลองใหม่อีกครั้ง',
+            icon: 'error',
+            confirmButtonText: 'ตกลง',
+            confirmButtonColor: '#3b82f6',
+          });
+        } finally {
           stopOcrProgress();
-          return;
         }
       } else {
         // Auto-tick ผ่าน for bio_test when uploading image 2
@@ -773,12 +817,13 @@ const getRandomDurationByProgram = (program: string): string => {
         // OCR + Claude AI ตรวจสอบ attest เฉพาะช่อง 2
         try {
           startOcrProgress();
-          const base64Data = base64.split(',')[1];
+          // Send image URL directly to OCR API
           const response = await fetch('/api/claude-ocr', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64Data })
+            body: JSON.stringify({ imageUrl: downloadURL })
           });
+          
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || `API error: ${response.status}`);
@@ -801,8 +846,8 @@ const getRandomDurationByProgram = (program: string): string => {
             });
             // clear attest image on the form when invalid
             setEditForm((prev: EditForm) => ({ ...prev, image_url_2: "" }));
-          } finally {
-            stopOcrProgress();
+          } catch (error) {
+            console.error('Error showing invalid attest alert:', error);
           }
           return;
           }
@@ -842,37 +887,37 @@ const getRandomDurationByProgram = (program: string): string => {
           setAttestSN(sn);
           setAttestTime(time);
           const updates: any = {
-            image_url_2: base64,
+            image_url_2: downloadURL,  
             attest_sn: sn,
-            attest_time: time
+            attest_time: time,
+            bio_test: biResult  
           };
           
-          // อัปเดตผล BI
+          // Prepare alert messages
           const alertMessages = [];
           
-        
-          updates.bio_test = biResult; // Auto-set the bio_test field based on OCR result
-          
-          // เพิ่มข้อความแจ้งเตือนผลการตรวจสอบ
+          // Add BI test result message
           if (hasMinusSymbol) {
             alertMessages.push('ผลตรวจสอบชีวภาพ: ตรวจพบเครื่องหมาย - ตั้งค่าเป็น "ผ่าน"');
           } else {
             alertMessages.push('ผลตรวจสอบชีวภาพ: ไม่พบเครื่องหมาย - ตั้งค่าเป็น "ไม่ผ่าน"');
           }
-          // ถ้าเจอวันที่จาก Attest OCR ให้อัปเดตฟอร์ม
+          
+          // Update date if found in attest
           if (attestDate) {
             setDate(attestDate);
             updates.date = attestDate;
             
-            // แจ้งเตือนเมื่อพบข้อมูล
+            // Prepare alert message
             let alertMessage = `ตั้งค่าวันที่จาก Attest: ${attestDate}`;
             
-            // เพิ่มข้อความผล BI ถ้ามี
+            // Add BI result if available
             if (biResult) {
               alertMessage += `\nตรวจพบผลตรวจสอบ BI: ${biResult}`;
             }
             
-            Swal.fire({
+            // Show success message
+            await Swal.fire({
               title: 'พบข้อมูลใน Attest',
               text: alertMessage,
               icon: 'success',
@@ -881,16 +926,33 @@ const getRandomDurationByProgram = (program: string): string => {
             });
           }
           
+          // Update the form with all changes
           setEditForm((prev: EditForm) => ({ ...prev, ...updates }));
-        } catch {
-          alert('เกิดข้อผิดพลาดในการวิเคราะห์ OCR กรุณาลองใหม่');
-          return;
+        } catch (error) {
+          console.error('Error processing OCR:', error);
+          Swal.fire({
+            title: 'เกิดข้อผิดพลาด',
+            text: 'ไม่สามารถประมวลผลวันที่จาก Attest ได้',
+            icon: 'error',
+            timer: 2000,
+            showConfirmButton: false
+          });
         } finally {
           stopOcrProgress();
         }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      await Swal.fire({
+        title: 'เกิดข้อผิดพลาด',
+        text: 'ไม่สามารถอัปโหลดรูปภาพได้ กรุณาลองใหม่อีกครั้ง',
+        icon: 'error',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      });
+    } finally {
+      stopOcrProgress();
+    }
   };
   // Add state for Attest OCR extraction
   const [attestSN, setAttestSN] = useState(editForm.attest_sn || '');

@@ -5,6 +5,21 @@ const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY ||
                       'your-claude-api-key-here';
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
+async function fetchImageAsBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error('Error fetching image:', error);
+    throw new Error('Failed to process image URL');
+  }
+}
+
 export async function POST(request: NextRequest) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -17,13 +32,31 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { imageBase64 } = await request.json();
+    const { imageBase64, imageUrl } = await request.json();
 
-    if (!imageBase64) {
+    if (!imageBase64 && !imageUrl) {
       return NextResponse.json({ error: 'No image data provided' }, { 
         status: 400,
         headers 
       });
+    }
+
+    let finalImageBase64 = imageBase64;
+    
+    // If imageUrl is provided, fetch the image and convert to base64
+    if (imageUrl) {
+      try {
+        finalImageBase64 = await fetchImageAsBase64(imageUrl);
+      } catch (error) {
+        console.error('Error processing image URL:', error);
+        return NextResponse.json({ 
+          error: 'Failed to process image URL',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }, { 
+          status: 400,
+          headers 
+        });
+      }
     }
 
     const response = await fetch(CLAUDE_API_URL, {
@@ -49,7 +82,7 @@ export async function POST(request: NextRequest) {
                 source: {
                   type: 'base64',
                   media_type: 'image/jpeg',
-                  data: imageBase64
+                  data: finalImageBase64
                 }
               }
             ]

@@ -4,7 +4,17 @@ import {
   getFirestore, serverTimestamp, getCountFromServer, startAfter,
   QueryDocumentSnapshot, QueryConstraint, query as buildQuery
 } from 'firebase/firestore';
-
+import { 
+  getStorage, 
+  ref, 
+  uploadBytes, 
+  getDownloadURL, 
+  deleteObject,
+  listAll,
+  getMetadata,
+  updateMetadata,
+  StorageReference
+} from 'firebase/storage';
 
 export {
   Timestamp,
@@ -20,8 +30,18 @@ export {
   setDoc,
   where,
   getFirestore,
-  serverTimestamp
+  serverTimestamp,
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  listAll,
+  getMetadata,
+  updateMetadata
 };
+
+export type { StorageReference };
 
 
 export const query = buildQuery;
@@ -67,6 +87,32 @@ interface TestData {
   chemical_external?: TestResult;
   chemical_internal?: TestResult;
   bio_test?: TestResult;
+}
+
+async function uploadImage(file: File, path: string) {
+  const storage = getStorage();
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  const url = await getDownloadURL(storageRef);
+  return url; // นำ URL นี้ไปเก็บใน Firestore
+}
+
+export async function createLogWithImage(
+  program: string,
+  data: SterilizerEntry,
+  file?: File, // เพิ่ม parameter สำหรับไฟล์
+  userId: string = '',
+  userEmail: string = 'system',
+  userRole: string = 'system'
+) {
+  // ถ้ามีไฟล์ ให้ upload ก่อน
+  if (file) {
+    const path = `sterilizer_images/${Date.now()}_${file.name}`;
+    const url = await uploadImage(file, path);
+    data.image_url = url; // เพิ่ม field ใน document
+  }
+
+  return createLog(program, data, userId, userEmail, userRole);
 }
 
 export type AuditLogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_ATTEMPT';
