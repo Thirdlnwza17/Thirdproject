@@ -31,7 +31,7 @@ const WeekdayPieChart: React.FC<Props> = ({ weekdays }) => {
                        weekdays.counts?.length > 0 && 
                        weekdays.counts.some((count: number) => count > 0);
 
-  // Prepare pie chart data
+  
   const pieData: ChartData<'pie', number[], string> = {
     labels: weekdays.labels,
     datasets: [

@@ -357,7 +357,7 @@ export default function HistoryFormModal({
     }));
   };
 
-  // Handle program changes
+  // Handle program changes and pot number changes
   useEffect(() => {
     if (form.program === 'PREVAC' || form.program === 'BOWIE') {
       setForm((prev: FormData) => ({
@@ -365,7 +365,8 @@ export default function HistoryFormModal({
         prevac: true,
         c134c: true,
         s9: true,
-        d20: true
+        d20: true,
+        sterilizer: ''  // Clear sterilizer when switching to PREVAC or BOWIE
       }));
     } else if (form.program === 'EO') {
       setForm((prev: FormData) => ({
@@ -373,15 +374,19 @@ export default function HistoryFormModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false
+        d20: false,
+        sterilizer: '300A'  // Auto-set sterilizer to '300A' when EO is selected
       }));
     } else if (form.program === 'Plasma') {
+      // For Plasma program, set sterilizer to Px/ where x is the pot number
+      const potPrefix = form.potNumber ? `P${form.potNumber}/` : 'P/'; 
       setForm((prev: FormData) => ({
         ...prev,
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false
+        d20: false,
+        sterilizer: potPrefix
       }));
     } else if (form.program) {
       setForm((prev: FormData) => ({
@@ -389,10 +394,21 @@ export default function HistoryFormModal({
         prevac: false,
         c134c: false,
         s9: false,
-        d20: false
+        d20: false,
+        sterilizer: ''  // Clear sterilizer for any other program
       }));
     }
-  }, [form.program, setForm]);
+  }, [form.program, form.potNumber, setForm]);
+
+  // Handle pot number changes when program is Plasma
+  useEffect(() => {
+    if (form.program === 'Plasma' && form.potNumber) {
+      setForm(prev => ({
+        ...prev,
+        sterilizer: `P${form.potNumber}/`
+      }));
+    }
+  }, [form.potNumber, form.program, setForm]);
 
   // Add a new row to the items table
   const addRow = () => {

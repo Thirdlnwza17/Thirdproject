@@ -13,21 +13,17 @@ import {
   uploadBytes,
   getDownloadURL,
   deleteObject,
-  listAll,
-  getMetadata,
-  updateMetadata,
-  StorageReference 
 } from '@/dbService';
 
 /**
-
- * @param {File} file - The image file to resize
- * @param {number} maxWidth - Maximum width in pixels
- * @param {number} maxHeight - Maximum height in pixels
- * @param {number} [quality=0.7] - Image quality (0 to 1)
+ 
+ * @param {File} file 
+ * @param {number} maxWidth 
+ * @param {number} maxHeight 
+ * @param {number} [quality=0.4] 
  * @returns {Promise<string>} 
  */
-const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.7): Promise<string> => {
+const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 1.0): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Validate input
     if (!file || !(file instanceof Blob)) {
@@ -37,78 +33,113 @@ const resizeImage = (file: File, maxWidth: number, maxHeight: number, quality = 
       return reject(new Error('Invalid dimensions provided'));
     }
     if (quality <= 0 || quality > 1) {
-      quality = 0.5; 
+      quality = 1.0; // Set to 100% for maximum image clarity
     }
 
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     
-    // Handle image load errors
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('Failed to load image'));
-    };
-
     img.onload = () => {
       try {
-        URL.revokeObjectURL(objectUrl); // Clean up object URL
+        URL.revokeObjectURL(objectUrl);
         
         // Calculate new dimensions while maintaining aspect ratio
-        let { width, height } = img;
-        const isPortrait = height > width;
+        let width = img.width;
+        let height = img.height;
         
-        if (width > maxWidth || height > maxHeight) {
-          const scale = Math.min(maxWidth / width, maxHeight / height);
-          width = Math.floor(width * scale);
-          height = Math.floor(height * scale);
+        // Set maximum dimensions to 1600px for higher resolution
+        const targetWidth = Math.min(width, 1600);
+        const targetHeight = Math.min(height, 1600);
+        
+        if (width > targetWidth || height > targetHeight) {
+          // Use a more precise scaling with higher quality
+          const ratio = Math.min(targetWidth / width, targetHeight / height);
+          // Use Math.round for more precise dimensions
+          width = Math.round(width * ratio * 10) / 10;
+          height = Math.round(height * ratio * 10) / 10;
         }
 
         // Create canvas with the new dimensions
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-
-        // Set image rendering quality
+        
+        // Get 2D context
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) {
           throw new Error('Could not get canvas context');
         }
-        
-        // Improve image quality for the resize
+
+        // Draw image with highest quality settings
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
-        // Draw the image on the canvas with white background
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
+        // Draw the image with sub-pixel rendering for smoother edges
+        const x = Math.round((canvas.width - width) / 2);
+        const y = Math.round((canvas.height - height) / 2);
+        
+        // Draw the image with sub-pixel precision
+        ctx.translate(0.5, 0.5);
+        ctx.drawImage(img, x, y, Math.round(width), Math.round(height));
+        ctx.translate(-0.5, -0.5);
+        
+        // Apply a subtle sharpening effect
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = true;
 
-        // Convert to Blob with specified quality
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              throw new Error('Failed to create blob from canvas');
-            }
-            
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (typeof reader.result === 'string') {
-                resolve(reader.result);
-              } else {
-                reject(new Error('Failed to read blob as data URL'));
+        // Apply mild contrast enhancement for better text readability
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        
+        // Mild contrast enhancement (1.2 is subtle but effective)
+        const contrast = 1.5;
+        const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+        
+        for (let i = 0; i < data.length; i += 4) {
+          // Apply contrast only to darker areas (preserves highlights)
+          if (data[i] < 200 || data[i+1] < 200 || data[i+2] < 200) {
+            data[i] = factor * (data[i] - 128) + 128;     // R
+            data[i + 1] = factor * (data[i + 1] - 128) + 128; // G
+            data[i + 2] = factor * (data[i + 2] - 128) + 128; // B
+          }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+
+        // Convert to Blob with specified quality (0.3 for 70% reduction)
+        return new Promise((resolveBlob) => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                return reject(new Error('Failed to create blob from canvas'));
               }
-            };
-            reader.onerror = () => reject(new Error('Error reading blob'));
-            reader.readAsDataURL(blob);
-          },
-          'image/jpeg',
-          quality
-        );
+              
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (typeof reader.result === 'string') {
+                  console.log(`Image compressed: ${(blob.size / 1024).toFixed(2)}KB (${((1 - (blob.size / file.size)) * 100).toFixed(1)}% reduction)`);
+                  resolve(reader.result);
+                } else {
+                  reject(new Error('Failed to read blob as data URL'));
+                }
+              };
+              reader.onerror = () => reject(new Error('Error reading blob'));
+              reader.readAsDataURL(blob);
+            },
+            'image/jpeg',  // Using JPEG for better compression
+            quality
+          );
+        });
       } catch (error) {
         reject(error);
       }
     };
 
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load image'));
+    };
 
     img.src = objectUrl;
   });
@@ -122,6 +153,34 @@ interface WindowWithLastTap extends Window {
 interface UserWithRole extends User {
   role?: string;
 }
+
+const getRandomDurationByProgram = (program: string): string => {
+  let min, max;
+  const programUpper = program?.toUpperCase?.() || '';
+  switch(programUpper) {
+    case 'PLASMA':
+      min = 45;
+      max = 75;
+      break;
+    case 'EO':
+      min = 8 * 60;
+      max = 12 * 60;
+      break;
+    case 'BOWIE':
+      min = 20;
+      max = 25;
+      break;
+    case 'PREVAC':
+      min = 45;
+      max = 60;
+      break;
+    default:
+      min = 20;
+      max = 25;
+  }
+  const duration = Math.floor(Math.random() * (max - min + 1)) + min;
+  return duration.toString();
+};
 
 interface EditForm {
   which: number[];
@@ -146,7 +205,7 @@ interface EditForm {
   bio_test?: string;
   image_url_1?: string;
   image_url_2?: string;
-
+  total_duration?: string;
 }
 
 interface SterilizerItem {
@@ -205,6 +264,7 @@ export default function EditLoadModal({
   const attestGalleryRef = useRef<HTMLInputElement>(null);
  
   const [image1, setImage1] = useState(editForm.image_url_1 || "");
+  const [image2, setImage2] = useState(editForm.image_url_2 || "");
  
   const [currentImageIdx, setCurrentImageIdx] = useState<1 | 2 | null>(null);
   const [showPickerModal, setShowPickerModal] = useState(false);
@@ -589,18 +649,29 @@ export default function EditLoadModal({
 
   // handle upload image
   const handleUpload = async (idx: 1 | 2, file: File) => {
+    startOcrProgress();
     try {
-      // Generate a unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+      // Generate a unique filename with jpg extension
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}.jpg`;
       const storagePath = `sterilizer_images/${fileName}`;
       
       // Create a reference to the file in Firebase Storage
       const storage = getStorage();
       const storageRef = ref(storage, storagePath);
       
-      // Upload the file
-      const snapshot = await uploadBytes(storageRef, file);
+      // Compress the image first
+      const compressedImageDataUrl = await resizeImage(file, 1200, 1200, 0.3);
+      
+      // Convert data URL to Blob
+      const response = await fetch(compressedImageDataUrl);
+      const blob = await response.blob();
+      const compressedFile = new File([blob], fileName, { 
+        type: 'image/jpeg',
+        lastModified: Date.now() 
+      });
+      
+      // Upload the compressed file
+      const snapshot = await uploadBytes(storageRef, compressedFile);
       
       // Get the download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
@@ -630,316 +701,62 @@ export default function EditLoadModal({
         }
       }
 
-      // Update the form with the download URL
+      // Update the form with the download URL and image state
       setEditForm((prev: any) => ({
         ...prev,
         [`image_url_${idx}`]: downloadURL,
       }));
 
+      // Update the image state for preview
       if (idx === 1) {
+        setImage1(downloadURL);
+        
         // Auto-tick ผ่าน for mechanical, chemical_external, chemical_internal
-        setEditForm((prev: EditForm) => ({
-          ...prev,
-          mechanical: 'ผ่าน',
-          chemical_external: 'ผ่าน',
-          chemical_internal: 'ผ่าน'
-        }));
-        // OCR + Claude AI ตรวจสอบ slip เฉพาะช่อง 1
-        startOcrProgress();
-        try {
-          // Send the Firebase Storage URL to the server for processing
-          const response = await fetch('/api/claude-ocr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: downloadURL })
-          });
+        // และสุ่มเวลา total_duration ถ้ายังไม่มีค่า
+        setEditForm((prev: EditForm) => {
+          const updates: Partial<EditForm> = {
+            mechanical: 'ผ่าน',
+            chemical_external: 'ผ่าน',
+            chemical_internal: 'ผ่าน',
+            [`image_url_${idx}`]: downloadURL
+          };
           
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `API error: ${response.status}`);
+          // ถ้า total_duration ยังว่าง และมีโปรแกรม ให้สุ่มเวลา
+          if (!prev.total_duration && prev.program) {
+            updates.total_duration = getRandomDurationByProgram(prev.program);
           }
-          const data = await response.json();
-          let ocrRaw = data.text || '';
-          // Process OCR text without storing raw text
-          ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
-          const isSlip = SLIP_KEYWORDS.some(keyword => ocrRaw.toUpperCase().includes(keyword.toUpperCase()));
-          if (!isSlip) {
-            try {
-              await Swal.fire({
-                title: 'รูปภาพไม่ถูกต้อง',
-                text: 'ไม่พบข้อมูลที่ระบุว่าเป็นสลิปจากเครื่องนึ่ง กรุณาเลือกรูปสลิปที่ถูกต้อง',
-                icon: 'warning',
-                confirmButtonText: 'ตกลง',
-                confirmButtonColor: '#3b82f6',
-              });
-            } catch (error) {
-              console.error('Error showing invalid image alert:', error);
-            }
-            return;
-          }
-          // Check if this is a duplicate of the current image
-          if (downloadURL === editForm[`image_url_${idx}`]) return;
           
-          // Process OCR for sterilization slip (image 1)
-          try {
-            // Use the OCR text from the API
-            const ocrText = ocrRaw;
-            console.log('OCR Text:', ocrText); // Debug log
-
-            // ดึงข้อมูลรอบการฆ่าเชื้อจากข้อความ OCR
-            const sterilizerInfo = extractSterilizerInfo(ocrText);
-
-            // ดึงเวลารวมจากข้อความ OCR
-            const totalDuration = extractTotalDuration(ocrText);
-            console.log('Extracted Total Duration:', totalDuration); // Debug log
-
-
-            const updates: any = {};
-
-            // เงื่อนไขใหม่: ถ้ามีรอบที่อยู่แล้วในฟอร์ม จะไม่ autofill ทับ
-            if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
-              updates.sterilizer = sterilizerInfo;
-            }
-
-            if (totalDuration) {
-              // แปลงรูปแบบเวลาเป็นนาที:วินาที
-              const minutes = parseDurationToMinutes(totalDuration);
-              // เก็บค่าเป็นนาทีสำหรับทุกโปรแกรม รวมถึง EO
-              updates.total_duration = minutes;
-            }
-// ฟังก์ชันสุ่มเวลาตามประเภทโปรแกรม
-const getRandomDurationByProgram = (program: string): string => {
-  let min, max;
-  const programUpper = program?.toUpperCase?.() || '';
-  switch(programUpper) {
-    case 'PLASMA':
-      min = 45;
-      max = 75;
-      break;
-    case 'EO':
-      min = 8 * 60;
-      max = 12 * 60;
-      break;
-    case 'BOWIE':
-      min = 20;
-      max = 25;
-      break;
-    case 'PREVAC':
-      min = 45;
-      max = 60;
-      break;
-    default:
-      min = 20;
-      max = 25;
-  }
-  const duration = Math.floor(Math.random() * (max - min + 1)) + min;
-  // For EO, return in minutes
-  return duration.toString();
-};
-            // ถ้า total_duration ยังว่าง ให้สุ่มเวลา
-            if ((!updates.total_duration && !editForm.total_duration) && editForm.program) {
-              updates.total_duration = getRandomDurationByProgram(editForm.program);
-            }
-            
-
-            setEditForm((prev: EditForm) => ({
-              ...prev,
-              ...updates
-            }));
-
-
-            const messageParts = [];
-
-            if (sterilizerInfo && (!editForm.sterilizer || editForm.sterilizer === '')) {
-              messageParts.push(`รอบการฆ่าเชื้อ: ${sterilizerInfo}`);
-            }
-
-            if (totalDuration) {
-              if (editForm.program === 'EO') {
-         
-                const hours = (parseInt(totalDuration) / 60).toFixed(2);
-                messageParts.push(`เวลารวม: ${hours} ชั่วโมง`);
-              } else {
-                messageParts.push(`เวลารวม: ${totalDuration} นาที`);
-              }
-            }
-
-            // แจ้งเตือนเมื่อพบข้อมูล
-            const alertMessage = messageParts.length > 0
-              ? `ตั้งค่าจาก OCR: ${messageParts.join(', ')}`
-              : '';
-
-            if (alertMessage) {
-              // Append information about auto-checked test results when image 1 is uploaded
-              const finalMessage = `${alertMessage}\n\nผลการตรวจ: กลไก, เทปเคมีภายนอก และเทปเคมีภายใน ถูกตั้งค่าเป็น "ผ่าน" อัตโนมัติ`;
-
-              Swal.fire({
-                title: 'พบข้อมูลในสลิป',
-                text: finalMessage,
-                icon: 'success', // use checkmark/success icon
-                timer: 4500,
-                showConfirmButton: false
-              });
-            }
-          } catch (error) {
-            console.error('Error processing OCR:', error);
-            Swal.fire({
-              title: 'เกิดข้อผิดพลาด',
-              text: 'ไม่สามารถประมวลผลวันที่จากสลิปได้',
-              icon: 'error',
-              timer: 2000,
-              showConfirmButton: false
-            });
-          } finally {
-            // stop progress regardless
-            stopOcrProgress();
-          }
-          setImage1(downloadURL);
-          setEditForm((prev: EditForm) => ({ ...prev, image_url_1: downloadURL }));
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          await Swal.fire({
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถอัปโหลดรูปภาพได้ กรุณาลองใหม่อีกครั้ง',
-            icon: 'error',
-            confirmButtonText: 'ตกลง',
-            confirmButtonColor: '#3b82f6',
-          });
-        } finally {
-          stopOcrProgress();
-        }
+          return { ...prev, ...updates };
+        });
+        
+        // Show success message for image 1
+        Swal.fire({
+          title: 'อัปโหลดรูปภาพสำเร็จ',
+          text: 'รูปภาพถูกอัปโหลดเรียบร้อยแล้ว',
+          icon: 'success',
+          timer: 2000,
+          showConfirmButton: false
+        });
+        return;
       } else {
+        // Update the image state for preview
+        setImage2(downloadURL);
+        
         // Auto-tick ผ่าน for bio_test when uploading image 2
         setEditForm((prev: EditForm) => ({
           ...prev,
-          bio_test: 'ผ่าน'
+          bio_test: 'ผ่าน',
+          [`image_url_${idx}`]: downloadURL
         }));
-        // OCR + Claude AI ตรวจสอบ attest เฉพาะช่อง 2
-        try {
-          startOcrProgress();
-          // Send image URL directly to OCR API
-          const response = await fetch('/api/claude-ocr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: downloadURL })
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `API error: ${response.status}`);
-          }
-          const data = await response.json();
-          let ocrRaw = data.text || '';
-          // Process OCR text without storing raw text
-          ocrRaw = ocrRaw.replace(/^Here is the full raw text extracted from the image:\s*/i, '');
-          console.log('OCR RAW:', ocrRaw); // debug
-
-          const isAutoReader = ocrRaw.includes('490') || ocrRaw.toUpperCase().includes('390G');
-          if (!isAutoReader) {
-             try {
-            await Swal.fire({
-              title: 'เอกสารไม่ถูกต้อง',
-              text: 'ไม่อนุญาตให้อัปโหลด: ไม่ใช่เอกสารจากเครื่อง Auto Reader 490 หรือ 390G',
-              icon: 'warning',
-              confirmButtonText: 'ตกลง',
-              confirmButtonColor: '#3b82f6',
-            });
-            // clear attest image on the form when invalid
-            setEditForm((prev: EditForm) => ({ ...prev, image_url_2: "" }));
-          } catch (error) {
-            console.error('Error showing invalid attest alert:', error);
-          }
-          return;
-          }
-          
-          // ตรวจสอบผล BI จาก OCR
-          let biResult = '';
-          const hasMinusSymbol = ocrRaw.includes('-');
-          
-          // ตั้งค่าเป็น 'ผ่าน' เมื่อพบเครื่องหมาย -
-          biResult = hasMinusSymbol ? 'ผ่าน' : 'ไม่ผ่าน';
-
-          // ดึงข้อมูลจาก OCR
-          const lines = ocrRaw.split('\n').map((l: string) => l.trim()).filter(Boolean);
-          // SN
-          let sn = '';
-          const snLine = lines.find((l: string) => /SN|S\/N|Serial/i.test(l));
-          if (snLine) {
-            const snMatch = snLine.match(/SN\s*[:\-]?\s*([A-Za-z0-9]+)/i) || snLine.match(/Serial\s*No\.?\s*([A-Za-z0-9]+)/i);
-            if (snMatch) sn = snMatch[1];
-          }
-          // เวลา
-          let time = '';
-          const timeLine = lines.find((l: string) => /\d{2}:\d{2}/.test(l));
-          if (timeLine) {
-            const timeMatch = timeLine.match(/(\d{2}:\d{2})/);
-            if (timeMatch) time = timeMatch[1];
-          }
-          // วันที่จาก Attest OCR
-          let attestDate = '';
-          // ตรวจสอบรูปแบบวันที่ YYYY-MM-DD
-          const dateMatch = ocrRaw.match(/(\d{4}-\d{2}-\d{2})/);
-          if (dateMatch) {
-            // แปลงรูปแบบจาก YYYY-MM-DD เป็น YYYY/MM/DD
-            attestDate = dateMatch[0].replace(/-/g, '/');
-          }
-          
-          setAttestSN(sn);
-          setAttestTime(time);
-          const updates: any = {
-            image_url_2: downloadURL,  
-            attest_sn: sn,
-            attest_time: time,
-            bio_test: biResult  
-          };
-          
-          // Prepare alert messages
-          const alertMessages = [];
-          
-          // Add BI test result message
-          if (hasMinusSymbol) {
-            alertMessages.push('ผลตรวจสอบชีวภาพ: ตรวจพบเครื่องหมาย - ตั้งค่าเป็น "ผ่าน"');
-          } else {
-            alertMessages.push('ผลตรวจสอบชีวภาพ: ไม่พบเครื่องหมาย - ตั้งค่าเป็น "ไม่ผ่าน"');
-          }
-          
-          // Update date if found in attest
-          if (attestDate) {
-            setDate(attestDate);
-            updates.date = attestDate;
-            
-            // Prepare alert message
-            let alertMessage = `ตั้งค่าวันที่จาก Attest: ${attestDate}`;
-            
-            // Add BI result if available
-            if (biResult) {
-              alertMessage += `\nตรวจพบผลตรวจสอบ BI: ${biResult}`;
-            }
-            
-            // Show success message
-            await Swal.fire({
-              title: 'พบข้อมูลใน Attest',
-              text: alertMessage,
-              icon: 'success',
-              timer: 4000,
-              showConfirmButton: false
-            });
-          }
-          
-          // Update the form with all changes
-          setEditForm((prev: EditForm) => ({ ...prev, ...updates }));
-        } catch (error) {
-          console.error('Error processing OCR:', error);
-          Swal.fire({
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถประมวลผลวันที่จาก Attest ได้',
-            icon: 'error',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        } finally {
-          stopOcrProgress();
-        }
+        
+        // Show success message for image 2
+        Swal.fire({
+          title: 'อัปโหลดรูปภาพสำเร็จ',
+          text: 'รูปภาพถูกอัปโหลดเรียบร้อยแล้ว',
+          icon: 'success',
+          timer: 2000,
+          showConfirmButton: false
+        });
       }
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -954,9 +771,6 @@ const getRandomDurationByProgram = (program: string): string => {
       stopOcrProgress();
     }
   };
-  // Add state for Attest OCR extraction
-  const [attestSN, setAttestSN] = useState(editForm.attest_sn || '');
-  const [attestTime, setAttestTime] = useState(editForm.attest_time || '');
   // เพิ่ม state สำหรับ drag/offset
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -1052,6 +866,14 @@ const getRandomDurationByProgram = (program: string): string => {
 
   // ฟังก์ชันคำนวณสถานะ
   const calculateStatus = (formData: EditForm): string => {
+    // ตรวจสอบว่ามีรูปผลการทดสอบหรือไม่
+    const hasImages = formData.image_url_1 || formData.image_url_2;
+    
+    // ถ้าไม่มีรูปผลการทดสอบเลย ให้คืนค่า NONE (รอผลการทดสอบ)
+    if (!formData.image_url_1 && !formData.image_url_2) {
+      return 'NONE';
+    }
+    
     // ตรวจสอบว่ามีการเลือกผลการทดสอบหรือไม่
     const hasTestResults = 
       formData.mechanical === 'ผ่าน' || formData.mechanical === 'ไม่ผ่าน' ||
@@ -1083,6 +905,14 @@ const getRandomDurationByProgram = (program: string): string => {
     try {
       // Create a copy of the form data
       const formData = { ...editForm };
+      
+      // ถ้าลบรูปทั้งสองรูป ให้เคลียร์ผลการทดสอบทั้งหมด
+      if (!formData.image_url_1 && !formData.image_url_2) {
+        formData.mechanical = '';
+        formData.chemical_external = '';
+        formData.chemical_internal = '';
+        formData.bio_test = '';
+      }
       
       // คำนวณและกำหนดสถานะ
       formData.status = calculateStatus(formData);
@@ -1898,9 +1728,7 @@ const getRandomDurationByProgram = (program: string): string => {
               <div className="font-bold text-black mb-1">ผลตรวจสอบ Attest</div>
               
               <div className="flex gap-4 items-center mt-2 flex-wrap">
-                <span className="text-black">SN: {attestSN || '-'}</span>
                 {date && <span className="text-black">วันที่: {date}</span>}
-                <span className="text-black">เวลา: {attestTime || '-'}</span>
                 <label className="font-bold text-black flex items-center gap-2">
                   Total Duration
                   <span className="flex items-center gap-1">
@@ -2141,13 +1969,8 @@ const getRandomDurationByProgram = (program: string): string => {
                       setEditForm((prev: EditForm) => ({ 
                         ...prev, 
                         image_url_2: "",
-                        // Clear autofilled data from attest
-                        attest_sn: "",
-                        attest_time: "",
                         bio_test: ""
                       }));
-                      setAttestSN("");
-                      setAttestTime("");
                       Swal.fire({
                         title: 'ลบรูปภาพ',
                         text: 'ลบรูปภาพ Attest เรียบร้อย',
@@ -2272,7 +2095,7 @@ const getRandomDurationByProgram = (program: string): string => {
       {isOcrLoading && (
         <div className="fixed inset-0 z-60 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto bg-black/60 rounded-lg p-4 w-72 text-center">
-            <div className="text-white font-bold mb-2">กำลังประมวลผลรูปภาพ (OCR)</div>
+            <div className="text-white font-bold mb-2">กำลังประมวลผลรูปภาพ </div>
             <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden mb-2">
               <div className="bg-white h-full" style={{ width: `${ocrProgress}%` }} />
             </div>

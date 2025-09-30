@@ -104,10 +104,10 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
 
 
 
-// Type for test results that we expect to work with
+
 type TestResultValue = 'ผ่าน' | 'ไม่ผ่าน' | string | boolean | undefined;
 
-// Type for objects that can be checked for test results
+
 type TestResults = {
   mechanical?: TestResultValue;
   chemical_external?: TestResultValue;

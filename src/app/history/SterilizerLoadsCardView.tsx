@@ -566,7 +566,6 @@ export default function SterilizerLoadsCardView({
     const headers = [
       "วันที่",
       "รอบที่",
-      "SN",
       "หม้อที่",
       "โปรแกรม",
       "อุปกรณ์",
@@ -574,7 +573,6 @@ export default function SterilizerLoadsCardView({
       "เทปภายใน",
       "กลไก",
       "ชีวภาพ",
-      "เวลาAttest",
       "เจ้าหน้าที่",
       "ผู้อ่านผล"
     ];
@@ -588,7 +586,6 @@ export default function SterilizerLoadsCardView({
         ? (e.date as Timestamp).toDate().toISOString().slice(0, 10)
         : (typeof e.date === 'string' ? e.date : (e.date ?? "")),
       e.sterilizer ?? "",
-      e.attest_sn ?? e.serial_number ?? "",
       e.potNumber ?? "",
       e.program ?? "",
       Array.isArray(e.items)
@@ -598,7 +595,6 @@ export default function SterilizerLoadsCardView({
       e.chemical_internal ?? "",
       e.mechanical ?? "",
       e.bio_test ?? "",
-      e.attest_time ?? "",
       e.sterile_staff ?? "",
       e.result_reader ?? ""
     ]);
@@ -797,8 +793,6 @@ export default function SterilizerLoadsCardView({
                 onChange={e => { setSnFilter(e.target.value); setCurrentPage(1); }}
               >
                 <option value="">ทั้งหมด</option>
-                <option value="431930">431930</option>
-                <option value="101715">101715</option>
               </select>
             </div>
 
