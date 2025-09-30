@@ -369,25 +369,48 @@ export default function HistoryFormModal({
         sterilizer: ''  // Clear sterilizer when switching to PREVAC or BOWIE
       }));
     } else if (form.program === 'EO') {
-      setForm((prev: FormData) => ({
-        ...prev,
-        prevac: false,
-        c134c: false,
-        s9: false,
-        d20: false,
-        sterilizer: '300A'  // Auto-set sterilizer to '300A' when EO is selected
-      }));
+      // Only update if sterilizer is not already set or is being cleared
+      if (!form.sterilizer || form.sterilizer === '') {
+        setForm((prev: FormData) => ({
+          ...prev,
+          prevac: false,
+          c134c: false,
+          s9: false,
+          d20: false,
+          sterilizer: '300A'  // Auto-set sterilizer to '300A' when EO is selected and no sterilizer is set
+        }));
+      } else {
+        // Keep existing sterilizer value, just update the checkboxes
+        setForm((prev: FormData) => ({
+          ...prev,
+          prevac: false,
+          c134c: false,
+          s9: false,
+          d20: false
+        }));
+      }
     } else if (form.program === 'Plasma') {
-      // For Plasma program, set sterilizer to Px/ where x is the pot number
-      const potPrefix = form.potNumber ? `P${form.potNumber}/` : 'P/'; 
-      setForm((prev: FormData) => ({
-        ...prev,
-        prevac: false,
-        c134c: false,
-        s9: false,
-        d20: false,
-        sterilizer: potPrefix
-      }));
+      // For Plasma program, only update sterilizer if it's not already set or is being cleared
+      const potPrefix = form.potNumber ? `P${form.potNumber}/` : 'P/';
+      if (!form.sterilizer || form.sterilizer === '') {
+        setForm((prev: FormData) => ({
+          ...prev,
+          prevac: false,
+          c134c: false,
+          s9: false,
+          d20: false,
+          sterilizer: potPrefix
+        }));
+      } else {
+        // Keep existing sterilizer value, just update the checkboxes
+        setForm((prev: FormData) => ({
+          ...prev,
+          prevac: false,
+          c134c: false,
+          s9: false,
+          d20: false
+        }));
+      }
     } else if (form.program) {
       setForm((prev: FormData) => ({
         ...prev,
