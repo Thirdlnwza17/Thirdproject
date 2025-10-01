@@ -237,30 +237,117 @@ export default function HistoryFormModal({
     return 'PASS';
   };
 
-  const validateDate = (dateStr: string): boolean => {
-    const dateRegex = /^\d{4}\/(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])$/;
-    if (!dateRegex.test(dateStr)) {
+  const formatDateWithLeadingZeros = (dateStr: string): string => {
+    if (!dateStr) return dateStr;
+    
+    const parts = dateStr.split('/');
+    if (parts.length < 2) return dateStr; // Not enough parts to format
+    
+    // Format month with leading zero if needed
+    if (parts[1] && parts[1].length === 1) {
+      parts[1] = parts[1].padStart(2, '0');
+    }
+    
+    // Format day with leading zero if needed (if day exists)
+    if (parts[2] && parts[2].length === 1) {
+      parts[2] = parts[2].padStart(2, '0');
+    }
+    
+    return parts.join('/');
+  };
+
+  const validateDate = (dateStr: string): { isValid: boolean; formattedDate?: string } => {
+    // Check for empty or incomplete date
+    if (!dateStr || dateStr.trim() === '') {
+      setDateError('กรุณาระบุวันที่');
+      return { isValid: false };
+    }
+    
+    // Check format YYYY/MM/DD
+    const dateRegex = /^(\d{4})\/(\d{1,2})\/(\d{1,2})?$/;
+    const match = dateStr.match(dateRegex);
+    
+    if (!match) {
       setDateError('รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น YYYY/MM/DD');
-      return false;
+      return { isValid: false };
     }
     
-    const [year, month, day] = dateStr.split('/').map(Number);
-    const date = new Date(year, month - 1, day);
+    // Format the date with leading zeros first
+    const formattedDate = formatDateWithLeadingZeros(dateStr);
     
-    if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
-      setDateError('วันที่ไม่ถูกต้อง');
-      return false;
+    // If we have all parts, validate the actual date
+    if (match[1] && match[2] && match[3]) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10);
+      const day = parseInt(match[3], 10);
+      
+      // Basic month validation
+      if (month < 1 || month > 12) {
+        setDateError('เดือนต้องอยู่ระหว่าง 1-12');
+        return { isValid: false };
+      }
+      
+      // Basic day validation
+      if (day < 1 || day > 31) {
+        setDateError('วันที่ต้องอยู่ระหว่าง 1-31');
+        return { isValid: false };
+      }
+      
+      // Actual date validation
+      const date = new Date(year, month - 1, day);
+      
+      if (date.getFullYear() !== year || 
+          date.getMonth() + 1 !== month || 
+          date.getDate() !== day) {
+        setDateError('วันที่ไม่ถูกต้อง');
+        return { isValid: false };
+      }
+      
+      // If we get here, the date is valid
+      setDateError('');
+      return { isValid: true, formattedDate };
+    } else if (match[1] && match[2]) {
+      // Only year and month provided
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10);
+      
+      if (month < 1 || month > 12) {
+        setDateError('เดือนต้องอยู่ระหว่าง 1-12');
+        return { isValid: false };
+      }
+      
+      // Return the partially formatted date
+      return { 
+        isValid: false, 
+        formattedDate: `${match[1]}/${match[2].padStart(2, '0')}` 
+      };
+    } else if (match[1]) {
+      // Only year provided
+      const year = parseInt(match[1], 10);
+      
+      if (year < 1900 || year > 2100) {
+        setDateError('ปีต้องอยู่ระหว่าง 1900-2100');
+        return { isValid: false };
+      }
+      
+      // Return just the year
+      return { isValid: false, formattedDate: match[1] };
     }
     
+    // If we get here, the date is still being entered
     setDateError('');
-    return true;
+    return { isValid: false };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validate date before submission
-    if (form.cycleDate && !validateDate(form.cycleDate)) {
-      return;
+    if (form.cycleDate) {
+      const { isValid } = validateDate(form.cycleDate);
+      if (!isValid) return;
+      
+      // Save the date to localStorage when form is submitted
+      localStorage.setItem('lastUsedDate', form.cycleDate);
     }
     try {
       // คำนวณและกำหนดสถานะก่อนส่งข้อมูล
@@ -292,6 +379,17 @@ export default function HistoryFormModal({
     }
   };
 
+  // Load last used date from localStorage on component mount
+  useEffect(() => {
+    const lastUsedDate = localStorage.getItem('lastUsedDate');
+    if (lastUsedDate) {
+      setForm(prev => ({
+        ...prev,
+        cycleDate: lastUsedDate
+      }));
+    }
+  }, []);
+
   // Auto-fill staff and reader from user info whenever the modal is shown
   useEffect(() => {
     if (show && user) {
@@ -299,10 +397,14 @@ export default function HistoryFormModal({
       const today = new Date();
       const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
       
+      // Only set the current date if there's no date in the form and no last used date
+      const lastUsedDate = localStorage.getItem('lastUsedDate');
+      const dateToUse = lastUsedDate || (!form.cycleDate ? formattedDate : form.cycleDate);
+      
       setForm(prev => ({
         ...prev,
         potNumber: prev.potNumber || '',
-        cycleDate: formattedDate,
+        cycleDate: dateToUse,
         sterile_staff: userName,
         result_reader: userName,
         // Keep existing values for other fields
@@ -327,23 +429,41 @@ export default function HistoryFormModal({
   }, [form.sterile_staff, form.result_reader]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, ''); // Remove all non-digits
+    let value = e.target.value;
+    const originalValue = value;
+    
+    // Only allow digits and forward slashes
+    value = value.replace(/[^0-9/]/g, '');
     
     // Auto-format the date as YYYY/MM/DD
-    if (value.length > 4) {
-      value = value.substring(0, 4) + '/' + value.substring(4);
-    }
-    if (value.length > 7) {
-      value = value.substring(0, 7) + '/' + value.substring(7, 9);
+    const parts = value.split('/');
+    let formattedValue = '';
+    
+    if (parts[0]) {
+      formattedValue = parts[0].substring(0, 4); // YYYY (max 4 digits)
+      
+      if (parts[1] !== undefined) {
+        formattedValue += '/' + parts[1].substring(0, 2); // MM (max 2 digits)
+        
+        if (parts[2] !== undefined) {
+          formattedValue += '/' + parts[2].substring(0, 2); // DD (max 2 digits)
+        } else if (originalValue.endsWith('/') && parts[1].length === 2) {
+          // Add trailing slash after month if user typed it
+          formattedValue += '/';
+        }
+      } else if (originalValue.endsWith('/') && parts[0].length === 4) {
+        // Add trailing slash after year if user typed it
+        formattedValue += '/';
+      }
     }
     
     // Update the form state
     setForm(prev => ({
       ...prev,
-      [e.target.name]: value
+      [e.target.name]: formattedValue
     }));
     
-    // Clear error when user starts typing
+    // Clear error when user is typing
     if (dateError) setDateError('');
   };
 
@@ -483,7 +603,7 @@ export default function HistoryFormModal({
             <div className="flex-1 min-w-[260px] flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">
                 <label className="font-medium text-gray-600">
-                  วันที่
+                  วันที่ (ปี/เดือน/วัน)
                   <input 
                     name="cycleDate" 
                     type="text" 
@@ -518,11 +638,37 @@ export default function HistoryFormModal({
                         }));
                       }
                     }}
-                    onBlur={() => form.cycleDate && validateDate(form.cycleDate)}
+                    onBlur={(e) => {
+                      const { isValid, formattedDate } = validateDate(e.target.value || '');
+                      if (formattedDate) {
+                        setForm(prev => ({
+                          ...prev,
+                          cycleDate: formattedDate
+                        }));
+                      }
+                    }}
                     placeholder="YYYY/MM/DD"
                     maxLength={10}
                     required
                   />
+                  <div className="mt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date();
+                        const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+                        setForm(prev => ({
+                          ...prev,
+                          cycleDate: formattedDate
+                        }));
+                        // Also update localStorage
+                        localStorage.setItem('lastUsedDate', formattedDate);
+                      }}
+                      className="text-xs text-blue-500 hover:text-blue-700 hover:underline focus:outline-none"
+                    >
+                      ปรับวันที่เป็นวันนี้
+                    </button>
+                  </div>
                 </label>
                 <label className="font-medium text-gray-600">
                   รอบการฆ่าเชื้อที่
