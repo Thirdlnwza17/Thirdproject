@@ -92,13 +92,22 @@ const UserDropdown = ({ user, role, onLogout }: { user: AppUser | null, role: st
             <p className="text-xs text-gray-500">Role: {role === 'admin' ? 'Admin' : 'Operator'}</p>
           </div>
           {role === 'admin' && (
-            <Link 
-              href="/audit-log" 
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              onClick={() => setIsOpen(false)}
-            >
-              Audit Log
-            </Link>
+            <>
+              <Link 
+                href="/audit-log" 
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => setIsOpen(false)}
+              >
+                Audit Log
+              </Link>
+              <Link 
+                href="/user" 
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => setIsOpen(false)}
+              >
+                User Management
+              </Link>
+            </>
           )}
           <button
             onClick={() => {

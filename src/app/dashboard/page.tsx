@@ -79,13 +79,22 @@ const UserDropdown = ({ user, role, onLogout }: { user: User | null, role: strin
             <p className="text-xs text-gray-500">Role: {role === 'admin' ? 'Admin' : 'Operator'}</p>
           </div>
           {role === 'admin' && (
-            <Link 
-              href="/audit-log" 
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
-              onClick={() => setIsOpen(false)}
-            >
-              Audit Log
-            </Link>
+            <>
+              <Link 
+                href="/audit-log" 
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
+                onClick={() => setIsOpen(false)}
+              >
+                Audit Log
+              </Link>
+              <Link 
+                href="/user" 
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
+                onClick={() => setIsOpen(false)}
+              >
+                User Management
+              </Link>
+            </>
           )}
           <button
             onClick={() => {
