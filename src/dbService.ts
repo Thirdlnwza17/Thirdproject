@@ -580,7 +580,8 @@ export async function fetchAllUsers(): Promise<UserData[]> {
       id: doc.id,
       email: doc.data().email,
       fullName: doc.data().fullName || doc.data().displayName || 'No Name',
-      role: doc.data().role || ''
+      role: doc.data().role || '',
+      lastLogin: doc.data().lastLogin
     }));
   } catch (error) {
     console.error('Error fetching users:', error);

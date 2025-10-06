@@ -10,7 +10,7 @@ import { fetchAllUsers, UserData } from '@/dbService';
 interface User extends Omit<UserData, 'lastLogin'> {
   status: 'online' | 'offline';
   name: string;
-  lastOnline: Date | null;
+  lastLogin: { toDate: () => Date } | null;
 }
 
 interface Bubble {
@@ -41,7 +41,7 @@ export default function UserManagementPage() {
           const user: User = {
             ...userData,
             name: userData.fullName || userData.email.split('@')[0],
-            lastOnline: userData.lastLogin?.toDate() || null,
+            lastLogin: userData.lastLogin || null,
             status: 'offline' // You might want to implement online status tracking
           };
           return user;
@@ -200,9 +200,10 @@ export default function UserManagementPage() {
     };
   }, []);
 
-  const formatLastOnline = (date: Date | null) => {
+  const formatLastLogin = (date: { toDate: () => Date } | Date | undefined | null) => {
     if (!date) return 'ไม่ทราบ';
-    return format(date, 'dd MMM yyyy HH:mm', { locale: th });
+    const dateObj = typeof date === 'object' && 'toDate' in date ? date.toDate() : date;
+    return format(dateObj, 'yyyy/MM/dd HH:mm');
   };
 
   return (
@@ -222,7 +223,7 @@ export default function UserManagementPage() {
               height={50}
               className="rounded-lg"
             />
-            <h1 className="text-3xl font-bold text-gray-800">จัดการผู้ใช้งาน</h1>
+            <h1 className="text-3xl font-bold text-gray-800">ผู้ใช้งานทั้งหมด</h1>
           </div>
           <div className="flex space-x-4">
             <Link href="/dashboard">
@@ -287,9 +288,6 @@ export default function UserManagementPage() {
                         สิทธิ์การใช้งาน
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        สถานะ
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         ออนไลน์ล่าสุด
                       </th>
                     </tr>
@@ -322,17 +320,8 @@ export default function UserManagementPage() {
                             {user.role === 'admin' ? 'Admin' : 'Operator'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            user.status === 'online' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {user.status === 'online' ? 'ออนไลน์' : 'ออฟไลน์'}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatLastOnline(user.lastOnline)}
+                          {formatLastLogin(user.lastLogin)}
                         </td>
                       </tr>
                     ))}
