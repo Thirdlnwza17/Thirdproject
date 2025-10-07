@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { th } from 'date-fns/locale';
 import Image from 'next/image';
 import { fetchAllUsers, UserData } from '@/dbService';
 
@@ -45,7 +44,12 @@ export default function UserManagementPage() {
             status: 'offline' // You might want to implement online status tracking
           };
           return user;
-        }).sort((a, b) => a.name.localeCompare(b.name, 'th'));
+        }).sort((a, b) => {
+          // Sort by admin status first (admin comes first), then by name
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (a.role !== 'admin' && b.role === 'admin') return 1;
+          return a.name.localeCompare(b.name, 'th');
+        });
         
         setUsers(transformedUsers);
       } catch (error) {

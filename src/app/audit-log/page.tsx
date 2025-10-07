@@ -638,7 +638,7 @@ export default function AuditLogPage() {
                   paginatedLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {format(log.timestamp, 'dd/MM/yyyy HH:mm:ss', { locale: th })}
+                        {format(log.timestamp, 'yyyy/MM/dd')}  {format(log.timestamp, 'HH:mm', { locale: th })}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
