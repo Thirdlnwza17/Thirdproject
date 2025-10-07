@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import Image from 'next/image';
-import { fetchAllUsers, UserData } from '@/dbService';
+import { fetchAllUsers, UserData, updateUserStatus } from '@/dbService';
 
 interface User extends Omit<UserData, 'lastLogin'> {
   status: 'online' | 'offline';
   name: string;
   lastLogin: { toDate: () => Date } | null;
+  active?: boolean;
 }
 
 interface Bubble {
@@ -27,6 +28,7 @@ export default function UserManagementPage() {
   const bubblesRef = useRef<Bubble[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
 
   // Fetch users from Firestore
   useEffect(() => {
@@ -210,6 +212,36 @@ export default function UserManagementPage() {
     return format(dateObj, 'yyyy/MM/dd HH:mm');
   };
 
+  const handleStatusToggle = async (userId: string, currentStatus: boolean) => {
+    try {
+      setUpdatingStatus(prev => ({ ...prev, [userId]: true }));
+      const newStatus = !currentStatus;
+      
+      // Prevent disabling admin accounts
+      const userToUpdate = users.find(user => user.id === userId);
+      if (userToUpdate?.role === 'admin') {
+        throw new Error('ไม่สามารถปรับสถานะผู้ดูแลระบบได้');
+      }
+      
+      // Update user status in the database
+      await updateUserStatus(userId, newStatus);
+      
+      // Update local state
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.id === userId 
+            ? { ...user, active: newStatus } 
+            : user
+        )
+      );
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      // You might want to show an error toast here with error.message
+    } finally {
+      setUpdatingStatus(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <canvas
@@ -294,6 +326,9 @@ export default function UserManagementPage() {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         ออนไลน์ล่าสุด
                       </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        สถานะ
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -326,6 +361,40 @@ export default function UserManagementPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {formatLastLogin(user.lastLogin)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {user.role !== 'admin' ? (
+                            <>
+                              <button
+                                onClick={() => handleStatusToggle(user.id, user.active || false)}
+                                disabled={updatingStatus[user.id]}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                                  user.active ? 'bg-green-500' : 'bg-gray-200'
+                                }`}
+                              >
+                                <span
+                                  className={`${
+                                    user.active ? 'translate-x-6' : 'translate-x-1'
+                                  } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                                />
+                                <span className="sr-only">
+                                  {user.active ? 'Active' : 'Inactive'}
+                                </span>
+                                {updatingStatus[user.id] && (
+                                  <span className="absolute inset-0 flex items-center justify-center">
+                                    <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                  </span>
+                                )}
+                              </button>
+                              <span className="ml-2 text-sm text-gray-600">
+                                {user.active ? 'ใช้งาน' : 'ไม่ใช้งาน'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-gray-600">
+                              ใช้งาน
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

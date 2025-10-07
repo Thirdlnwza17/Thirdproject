@@ -79,6 +79,7 @@ export interface UserData {
   role: string;
   displayName?: string;
   lastLogin?: { toDate: () => Date };
+  active?: boolean;
 }
 type TestResult = 'ผ่าน' | 'ไม่ผ่าน';
 
@@ -573,18 +574,24 @@ export function subscribeToSterilizerLoads(
 
 // User Management Functions
 export async function fetchAllUsers(): Promise<UserData[]> {
+  const usersRef = collection(db, 'users');
+  const querySnapshot = await getDocs(usersRef);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as UserData[];
+}
+
+export async function updateUserStatus(userId: string, isActive: boolean): Promise<void> {
   try {
-    const usersRef = collection(db, 'users');
-    const querySnapshot = await getDocs(usersRef);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      email: doc.data().email,
-      fullName: doc.data().fullName || doc.data().displayName || 'No Name',
-      role: doc.data().role || '',
-      lastLogin: doc.data().lastLogin
-    }));
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      active: isActive,
+      updatedAt: serverTimestamp()
+    });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error updating user status:', error);
     throw error;
   }
 }
@@ -597,20 +604,28 @@ export async function loginUser(email: string, password: string, selectedUserDat
       selectedUserData 
     });
     
+    // Check if user is active before attempting to sign in
+    const userDocRef = doc(db, 'users', selectedUserData.id);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data() as UserData;
+      if (userData.active === false) {
+        throw new Error('user-disabled');
+      }
+    }
+    
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-
     const role = selectedUserData.role;
     
     console.log('User authenticated, role:', role);
     
-
     await updateProfile(user, {
       displayName: selectedUserData.fullName
     });
     
-
-    const userDocRef = doc(db, 'users', selectedUserData.id);
+    // Update last login time
     await updateDoc(userDocRef, {
       lastLogin: Timestamp.now()
     });
