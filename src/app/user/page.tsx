@@ -32,6 +32,8 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Check authentication and fetch users
   useEffect(() => {
@@ -259,6 +261,24 @@ export default function UserManagementPage() {
     }
   };
 
+  // Calculate pagination
+  const totalPages = Math.ceil(users.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentUsers = users.slice(startIndex, endIndex);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <canvas
@@ -349,10 +369,10 @@ export default function UserManagementPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {users.map((user, index) => (
+                    {currentUsers.map((user, index) => (
                       <tr key={user.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {index + 1}
+                          {startIndex + index + 1}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
@@ -422,16 +442,32 @@ export default function UserManagementPage() {
 
             <div className="mt-6 flex justify-between items-center">
               <div className="text-sm text-gray-500">
-                แสดง <span className="font-medium">1</span> ถึง <span className="font-medium">{users.length}</span> จาก <span className="font-medium">{users.length}</span> รายการ
+                แสดง <span className="font-medium">{startIndex + 1}</span> ถึง <span className="font-medium">{Math.min(endIndex, users.length)}</span> จาก <span className="font-medium">{users.length}</span> รายการ
               </div>
               <div className="flex space-x-2">
-                <button className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <button 
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                  className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+                    currentPage === 1
+                      ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                      : 'text-gray-700 bg-white hover:bg-gray-50'
+                  }`}
+                >
                   ก่อนหน้า
                 </button>
                 <button className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
-                  1
+                  {currentPage}
                 </button>
-                <button className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <button 
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+                    currentPage === totalPages
+                      ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                      : 'text-gray-700 bg-white hover:bg-gray-50'
+                  }`}
+                >
                   ถัดไป
                 </button>
               </div>
