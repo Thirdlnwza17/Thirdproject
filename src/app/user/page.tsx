@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import Image from 'next/image';
-import { fetchAllUsers, UserData, updateUserStatus } from '@/dbService';
+import { fetchAllUsers, UserData, updateUserStatus, getCurrentUser } from '@/dbService';
 
 interface User extends Omit<UserData, 'lastLogin'> {
   status: 'online' | 'offline';
@@ -23,53 +24,69 @@ interface Bubble {
 }
 
 export default function UserManagementPage() {
+  const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const bubblesRef = useRef<Bubble[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-  // Fetch users from Firestore
+  // Check authentication and fetch users
   useEffect(() => {
-    const fetchUsers = async () => {
+    const checkAuthAndFetchUsers = async () => {
       try {
+        // Check if user is authenticated
+        const user = await getCurrentUser();
+        if (!user) {
+          router.push('/login');
+          return;
+        }
+        
+        setIsAuthenticated(true);
         setLoading(true);
-        const usersData = await fetchAllUsers();
         
-        // Transform and sort users
-        const transformedUsers: User[] = usersData.map(userData => {
-          const user: User = {
-            ...userData,
-            name: userData.fullName || userData.email.split('@')[0],
-            lastLogin: userData.lastLogin || null,
-            status: 'offline' // You might want to implement online status tracking
-          };
-          return user;
-        }).sort((a, b) => {
-          // Sort by admin status first (admin comes first), then by name
-          if (a.role === 'admin' && b.role !== 'admin') return -1;
-          if (a.role !== 'admin' && b.role === 'admin') return 1;
-          return a.name.localeCompare(b.name, 'th');
-        });
-        
-        setUsers(transformedUsers);
+        try {
+          // Fetch users data
+          const usersData = await fetchAllUsers();
+          
+          // Transform and sort users
+          const transformedUsers: User[] = usersData.map((userData: UserData) => {
+            return {
+              ...userData,
+              name: userData.fullName || userData.email.split('@')[0],
+              lastLogin: userData.lastLogin || null,
+              status: 'offline' as const
+            };
+          }).sort((a: User, b: User) => {
+            // Sort by admin status first (admin comes first), then by name
+            if (a.role === 'admin' && b.role !== 'admin') return -1;
+            if (a.role !== 'admin' && b.role === 'admin') return 1;
+            return a.name.localeCompare(b.name, 'th');
+          });
+          
+          setUsers(transformedUsers);
+        } catch (error) {
+          console.error('Error fetching users:', error);
+        } finally {
+          setLoading(false);
+        }
       } catch (error) {
-        console.error('Error fetching users:', error);
-      } finally {
-        setLoading(false);
+        console.error('Authentication error:', error);
+        router.push('/login');
       }
     };
 
-    fetchUsers();
+    checkAuthAndFetchUsers();
     
-    // Set up real-time updates if needed
-    // const unsubscribe = onSnapshot(collection(db, 'users'), () => {
-    //   fetchUsers();
-    // });
-    // 
-    // return () => unsubscribe();
-  }, []);
+    // Cleanup function
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [router]);
 
   // Bubble animation setup (same as audit log)
   useEffect(() => {
